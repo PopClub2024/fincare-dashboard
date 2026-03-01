@@ -524,9 +524,11 @@ export type Database = {
           forma_pagamento: Database["public"]["Enums"]["forma_pagamento"] | null
           fornecedor: string | null
           id: string
+          medico_id: string | null
           observacao: string | null
           ofx_transaction_id: string | null
           plano_contas_id: string | null
+          ref_dia_trabalhado: string | null
           status: Database["public"]["Enums"]["status_lancamento_cp"]
           tipo_despesa: Database["public"]["Enums"]["tipo_despesa"]
           updated_at: string
@@ -549,9 +551,11 @@ export type Database = {
             | null
           fornecedor?: string | null
           id?: string
+          medico_id?: string | null
           observacao?: string | null
           ofx_transaction_id?: string | null
           plano_contas_id?: string | null
+          ref_dia_trabalhado?: string | null
           status?: Database["public"]["Enums"]["status_lancamento_cp"]
           tipo_despesa?: Database["public"]["Enums"]["tipo_despesa"]
           updated_at?: string
@@ -574,9 +578,11 @@ export type Database = {
             | null
           fornecedor?: string | null
           id?: string
+          medico_id?: string | null
           observacao?: string | null
           ofx_transaction_id?: string | null
           plano_contas_id?: string | null
+          ref_dia_trabalhado?: string | null
           status?: Database["public"]["Enums"]["status_lancamento_cp"]
           tipo_despesa?: Database["public"]["Enums"]["tipo_despesa"]
           updated_at?: string
@@ -588,6 +594,13 @@ export type Database = {
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_lancamentos_medico_id_fkey"
+            columns: ["medico_id"]
+            isOneToOne: false
+            referencedRelation: "medicos"
             referencedColumns: ["id"]
           },
           {
@@ -1084,6 +1097,59 @@ export type Database = {
           },
         ]
       }
+      feegow_sync_runs: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          errors: Json | null
+          finished_at: string | null
+          healthcheck_ok: boolean | null
+          id: string
+          month: number
+          status: string
+          sync_invoices_ok: boolean | null
+          totals: Json | null
+          validate_sales_ok: boolean | null
+          year: number
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          errors?: Json | null
+          finished_at?: string | null
+          healthcheck_ok?: boolean | null
+          id?: string
+          month: number
+          status?: string
+          sync_invoices_ok?: boolean | null
+          totals?: Json | null
+          validate_sales_ok?: boolean | null
+          year: number
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          errors?: Json | null
+          finished_at?: string | null
+          healthcheck_ok?: boolean | null
+          id?: string
+          month?: number
+          status?: string
+          sync_invoices_ok?: boolean | null
+          totals?: Json | null
+          validate_sales_ok?: boolean | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feegow_sync_runs_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funcionarios: {
         Row: {
           ativo: boolean
@@ -1266,6 +1332,77 @@ export type Database = {
             columns: ["venda_id"]
             isOneToOne: false
             referencedRelation: "transacoes_vendas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_runs: {
+        Row: {
+          arquivo_hash: string | null
+          arquivo_nome: string | null
+          clinica_id: string
+          created_at: string
+          detalhes: Json | null
+          erros: Json | null
+          finished_at: string | null
+          id: string
+          origem: string
+          periodo_fim: string | null
+          periodo_inicio: string | null
+          registros_atualizados: number | null
+          registros_criados: number | null
+          registros_ignorados: number | null
+          registros_rejeitados: number | null
+          registros_total: number | null
+          status: string
+          tipo: string
+        }
+        Insert: {
+          arquivo_hash?: string | null
+          arquivo_nome?: string | null
+          clinica_id: string
+          created_at?: string
+          detalhes?: Json | null
+          erros?: Json | null
+          finished_at?: string | null
+          id?: string
+          origem?: string
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          registros_atualizados?: number | null
+          registros_criados?: number | null
+          registros_ignorados?: number | null
+          registros_rejeitados?: number | null
+          registros_total?: number | null
+          status?: string
+          tipo: string
+        }
+        Update: {
+          arquivo_hash?: string | null
+          arquivo_nome?: string | null
+          clinica_id?: string
+          created_at?: string
+          detalhes?: Json | null
+          erros?: Json | null
+          finished_at?: string | null
+          id?: string
+          origem?: string
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          registros_atualizados?: number | null
+          registros_criados?: number | null
+          registros_ignorados?: number | null
+          registros_rejeitados?: number | null
+          registros_total?: number | null
+          status?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_runs_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
             referencedColumns: ["id"]
           },
         ]
