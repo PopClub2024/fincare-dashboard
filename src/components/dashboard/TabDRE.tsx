@@ -72,6 +72,8 @@ interface Props {
 
 const MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+const EMPTY_FILTROS: Record<string, string> = {};
+
 function historicoToDreData(rows: any[]): DreData {
   const mensal: DreMonth[] = rows.map((r) => ({
     mes: `${r.ano}-${String(r.mes).padStart(2, "0")}`,
@@ -108,7 +110,7 @@ function historicoToDreData(rows: any[]): DreData {
   return { cards, mensal };
 }
 
-export default function TabDRE({ dateFrom, dateTo, filtros = {} }: Props) {
+export default function TabDRE({ dateFrom, dateTo, filtros = EMPTY_FILTROS }: Props) {
   const { clinicaId } = useAuth();
   const [data, setData] = useState<DreData | null>(null);
   const [loading, setLoading] = useState(true);
