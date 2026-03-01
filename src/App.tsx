@@ -11,6 +11,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import DashboardCFO from "./pages/DashboardCFO";
 import Caixa from "./pages/Caixa";
+import ContasAPagar from "./pages/ContasAPagar";
 import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
 
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/dashboard" element={<ProtectedRoute><DashboardCFO /></ProtectedRoute>} />
             <Route path="/caixa" element={<ProtectedRoute><Caixa /></ProtectedRoute>} />
+            <Route path="/contas-a-pagar" element={<ProtectedRoute><ContasAPagar /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
