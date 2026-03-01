@@ -48,7 +48,7 @@ export default function TabOperacional() {
           <CardTitle className="text-lg">Taxa de Ocupação</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-64">
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={[]}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
