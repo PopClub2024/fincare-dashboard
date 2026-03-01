@@ -1,15 +1,20 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Activity, DollarSign, TrendingUp, UserX, Stethoscope, FlaskConical, Syringe } from "lucide-react";
+import { Activity, DollarSign, TrendingUp, UserX, Stethoscope, FlaskConical, Syringe, CheckCircle2 } from "lucide-react";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -27,6 +32,7 @@ interface VendaRow {
   valor_bruto: number;
   forma_pagamento: string | null;
   status_recebimento: string;
+  observacao: string | null;
   data_prevista_recebimento: string | null;
   status_presenca: string | null;
   convenio_id: string | null;
@@ -46,13 +52,17 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
   const [vendas, setVendas] = useState<VendaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
+  const [baixaDialog, setBaixaDialog] = useState<VendaRow | null>(null);
+  const [baixaLoading, setBaixaLoading] = useState(false);
+  const [baixaObs, setBaixaObs] = useState("");
+  const [baixaData, setBaixaData] = useState(format(new Date(), "yyyy-MM-dd"));
 
   useEffect(() => {
     if (!clinicaId) return;
     setLoading(true);
     supabase
       .from("transacoes_vendas")
-      .select("id, data_competencia, procedimento, especialidade, valor_bruto, forma_pagamento, status_recebimento, data_prevista_recebimento, status_presenca, convenio_id, quantidade, medicos(nome), pacientes(nome), convenios(nome, prazo_repasse_dias)")
+      .select("id, data_competencia, procedimento, especialidade, valor_bruto, forma_pagamento, status_recebimento, data_prevista_recebimento, status_presenca, convenio_id, quantidade, observacao, medicos(nome), pacientes(nome), convenios(nome, prazo_repasse_dias)")
       .eq("clinica_id", clinicaId)
       .gte("data_competencia", format(dateFrom, "yyyy-MM-dd"))
       .lte("data_competencia", format(dateTo, "yyyy-MM-dd"))
@@ -64,6 +74,34 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
         setLoading(false);
       });
   }, [clinicaId, dateFrom, dateTo]);
+
+  const handleBaixa = useCallback(async () => {
+    if (!baixaDialog) return;
+    setBaixaLoading(true);
+    const { error } = await supabase
+      .from("transacoes_vendas")
+      .update({
+        status_recebimento: "recebido" as any,
+        data_caixa: baixaData,
+        observacao: baixaObs || null,
+      })
+      .eq("id", baixaDialog.id);
+
+    if (error) {
+      toast.error("Erro ao dar baixa: " + error.message);
+    } else {
+      toast.success("Baixa realizada com sucesso!");
+      setVendas((prev) =>
+        prev.map((v) =>
+          v.id === baixaDialog.id ? { ...v, status_recebimento: "recebido" } : v
+        )
+      );
+    }
+    setBaixaLoading(false);
+    setBaixaDialog(null);
+    setBaixaObs("");
+    setBaixaData(format(new Date(), "yyyy-MM-dd"));
+  }, [baixaDialog, baixaData, baixaObs]);
 
   // Classify production type from procedimento/especialidade
   const classifyTipo = (v: VendaRow): string => {
@@ -352,6 +390,7 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
                 <TableHead className="text-right">Valor</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Previsão</TableHead>
+                <TableHead className="text-center">Ação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -366,6 +405,25 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
                   <TableCell className="text-right font-medium">{fmt(c.valor_bruto)}</TableCell>
                   <TableCell>{statusBadge(c.status_recebimento)}</TableCell>
                   <TableCell className="whitespace-nowrap">{c.data_prevista_recebimento || "—"}</TableCell>
+                  <TableCell className="text-center">
+                    {c.status_recebimento === "a_receber" || c.status_recebimento === "inadimplente" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1 text-xs"
+                        onClick={() => {
+                          setBaixaDialog(c);
+                          setBaixaData(format(new Date(), "yyyy-MM-dd"));
+                          setBaixaObs("");
+                        }}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Baixa
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -375,6 +433,58 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog de Baixa Manual */}
+      <Dialog open={!!baixaDialog} onOpenChange={(open) => !open && setBaixaDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Baixa Manual de Receita</DialogTitle>
+            <DialogDescription>
+              Confirmar recebimento de {baixaDialog ? fmt(baixaDialog.valor_bruto) : ""}
+              {baixaDialog?.procedimento ? ` — ${baixaDialog.procedimento}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs text-muted-foreground">Paciente</Label>
+                <p className="text-sm font-medium">{baixaDialog ? (baixaDialog.pacientes as any)?.nome || "—" : ""}</p>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Pagador</Label>
+                <p className="text-sm font-medium">
+                  {baixaDialog?.convenio_id ? (baixaDialog.convenios as any)?.nome || "Convênio" : "Particular"}
+                </p>
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="baixa-data">Data do recebimento</Label>
+              <Input
+                id="baixa-data"
+                type="date"
+                value={baixaData}
+                onChange={(e) => setBaixaData(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="baixa-obs">Observação (opcional)</Label>
+              <Textarea
+                id="baixa-obs"
+                placeholder="Ex: Recebido em dinheiro no caixa"
+                value={baixaObs}
+                onChange={(e) => setBaixaObs(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBaixaDialog(null)}>Cancelar</Button>
+            <Button onClick={handleBaixa} disabled={baixaLoading}>
+              {baixaLoading ? "Processando..." : "Confirmar Baixa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
