@@ -41,13 +41,38 @@ async function finishLog(supabase: any, logId: string | null, status: string, st
     .eq("id", logId);
 }
 
-async function feegowFetch(url: string, headers: Record<string, string>, method = "GET", body?: any) {
-  const opts: RequestInit = { headers, method };
-  if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  const text = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.substring(0, 500)}`);
-  try { return JSON.parse(text); } catch { return { content: text }; }
+async function feegowFetch(url: string, headers: Record<string, string>, method = "GET", body?: any, maxRetries = 3) {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const opts: RequestInit = { headers, method };
+    if (body) opts.body = JSON.stringify(body);
+    try {
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      // 401/403: fail immediately, no retry
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(`AUTH_ERROR: HTTP ${res.status} - Token inválido ou sem permissão`);
+      }
+      // 429 or 5xx: retry with backoff
+      if (res.status === 429 || res.status >= 500) {
+        const waitMs = Math.min(1000 * Math.pow(2, attempt), 10000);
+        console.warn(`Feegow ${res.status} on attempt ${attempt + 1}, retrying in ${waitMs}ms...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        lastError = new Error(`HTTP ${res.status}: ${text.substring(0, 200)}`);
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.substring(0, 500)}`);
+      try { return JSON.parse(text); } catch { return { content: text }; }
+    } catch (e) {
+      if (e.message?.startsWith("AUTH_ERROR:")) throw e;
+      lastError = e;
+      if (attempt < maxRetries - 1) {
+        const waitMs = Math.min(1000 * Math.pow(2, attempt), 10000);
+        await new Promise(r => setTimeout(r, waitMs));
+      }
+    }
+  }
+  throw lastError || new Error("Max retries exceeded");
 }
 
 // ─── SYNC METADATA ─────────────────────────────────────────────

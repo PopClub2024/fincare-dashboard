@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.import-getnet-csv]
 verify_jwt = false
+
+[functions.feegow-healthcheck]
+verify_jwt = false
+
+[functions.feegow-backfill]
+verify_jwt = false
