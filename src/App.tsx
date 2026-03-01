@@ -20,6 +20,7 @@ import Endividamento from "./pages/Endividamento";
 import Impostos from "./pages/Impostos";
 import Precificacao from "./pages/Precificacao";
 import CustoFixo from "./pages/CustoFixo";
+import Conciliacao from "./pages/Conciliacao";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/impostos" element={<ProtectedRoute><Endividamento /></ProtectedRoute>} />
             <Route path="/precificacao" element={<ProtectedRoute><Precificacao /></ProtectedRoute>} />
             <Route path="/custo-fixo" element={<ProtectedRoute><CustoFixo /></ProtectedRoute>} />
+            <Route path="/conciliacao" element={<ProtectedRoute><Conciliacao /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
