@@ -6,6 +6,7 @@ import { useCashKpis, CashKpisData } from "@/hooks/useCashKpis";
 import { DollarSign, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import CashForecast from "./CashForecast";
+import CaixaDiaria from "./CaixaDiaria";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -149,6 +150,10 @@ export default function TabCaixa({ dateFrom, dateTo }: Props) {
           </CardContent>
         </Card>
       )}
+
+      {/* Caixa Feegow (diário/semanal/mensal) */}
+      <Separator />
+      <CaixaDiaria dateFrom={dateFrom} dateTo={dateTo} />
 
       {/* Cash Forecast */}
       <Separator />
