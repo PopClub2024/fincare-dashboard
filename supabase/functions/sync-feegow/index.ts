@@ -53,11 +53,10 @@ async function feegowFetch(url: string, headers: Record<string, string>, method 
       const res = await fetch(url, opts);
       const text = await res.text();
       if (res.status === 401 || res.status === 403) {
-        throw new Error(`AUTH_ERROR: HTTP ${res.status} - Token inválido ou sem permissão`);
+        throw new Error(`AUTH_ERROR: HTTP ${res.status}`);
       }
       if (res.status === 429 || res.status >= 500) {
-        const waitMs = Math.min(1000 * Math.pow(2, attempt), 10000);
-        await new Promise(r => setTimeout(r, waitMs));
+        await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt), 10000)));
         lastError = new Error(`HTTP ${res.status}: ${text.substring(0, 200)}`);
         continue;
       }
@@ -106,15 +105,13 @@ async function buildLookupMaps(supabase: any, clinicaId: string) {
 }
 
 // ─── Payment form mapping ──────────────────────────────────────
-function mapFormaPagamento(feegowId: number | null, description?: string): string | null {
-  // Common Feegow payment form IDs
+function mapFormaPagamento(feegowId: number | null, description?: any): string | null {
   const map: Record<number, string> = {
     1: "dinheiro", 2: "cartao_credito", 3: "cartao_debito",
     4: "pix", 5: "convenio_nf", 6: "dinheiro",
   };
   if (feegowId && map[feegowId]) return map[feegowId];
-  // Try by description
-  const desc = (description || "").toLowerCase();
+  const desc = String(description || "").toLowerCase();
   if (desc.includes("pix")) return "pix";
   if (desc.includes("créd") || desc.includes("credit")) return "cartao_credito";
   if (desc.includes("débi") || desc.includes("debit")) return "cartao_debito";
@@ -124,18 +121,21 @@ function mapFormaPagamento(feegowId: number | null, description?: string): strin
 }
 
 // ─── SYNC METADATA ─────────────────────────────────────────────
-async function syncMetadata(supabase: any, clinicaId: string, headers: Record<string, string>, includePatients = false) {
-  const result = { medicos: 0, salas: 0, convenios: 0, pacientes: 0, errors: [] as string[] };
+async function syncMetadata(supabase: any, clinicaId: string, headers: Record<string, string>) {
+  const result = { medicos: 0, salas: 0, convenios: 0, errors: [] as string[] };
 
   try {
     const data = await feegowFetch(`${FEEGOW_BASE}/professional/list`, headers);
     const profs = data.content || [];
     for (const prof of (Array.isArray(profs) ? profs : [])) {
+      const fid = String(prof.profissional_id || prof.professional_id || prof.id || "");
+      const espArr = prof.especialidades || [];
+      const espNome = Array.isArray(espArr) && espArr.length > 0 ? espArr[0].nome_especialidade : (prof.specialty_name || null);
       const { error } = await supabase.from("medicos").upsert({
         clinica_id: clinicaId,
-        feegow_id: String(prof.professional_id || prof.id),
-        nome: prof.name || prof.nome || "Sem nome",
-        especialidade: prof.specialty_name || prof.especialidade || null,
+        feegow_id: fid,
+        nome: prof.nome || prof.name || "Sem nome",
+        especialidade: espNome,
         crm: prof.crm || null,
         documento: prof.cpf || null,
         ativo: prof.active !== false,
@@ -176,31 +176,80 @@ async function syncMetadata(supabase: any, clinicaId: string, headers: Record<st
     }
   } catch (e: any) { result.errors.push(`Convênios: ${e.message}`); }
 
-  if (includePatients) {
-    try {
-      const data = await feegowFetch(`${FEEGOW_BASE}/patient/list`, headers);
-      const patients = data.content || [];
-      for (const pat of (Array.isArray(patients) ? patients : [])) {
-        const { error } = await supabase.from("pacientes").upsert({
-          clinica_id: clinicaId,
-          feegow_id: String(pat.patient_id || pat.id),
-          nome: pat.name || pat.nome || "Sem nome",
-          data_cadastro: pat.created_at || pat.data_cadastro || null,
-        }, { onConflict: "clinica_id,feegow_id" });
-        if (!error) result.pacientes++;
-        else result.errors.push(`Paciente: ${error.message}`);
-      }
-    } catch (e: any) { result.errors.push(`Pacientes: ${e.message}`); }
-  }
   return result;
 }
 
-// ─── SYNC INVOICES (NEW PRIMARY SOURCE) ────────────────────────
-// Strategy:
-//   1. financial/list-invoice → items + payments (primary financial data)
-//   2. appoints/search → metadata complement (doctor, specialty, patient)
-//   3. Upsert into vendas_itens, vendas_pagamentos, transacoes_vendas
-async function syncInvoices(
+// ─── Fetch ALL appoints with pagination ────────────────────────
+async function fetchAllAppoints(headers: Record<string, string>, dateStart: string, dateEnd: string): Promise<any[]> {
+  const fd = toFeegowDate(dateStart);
+  const td = toFeegowDate(dateEnd);
+  const all: any[] = [];
+  let page = 1;
+  const maxPages = 50; // safety
+
+  while (page <= maxPages) {
+    try {
+      const url = `${FEEGOW_BASE}/appoints/search?data_start=${fd}&data_end=${td}&list_procedures=1&page=${page}&perPage=200`;
+      const data = await feegowFetch(url, headers);
+      const content = data.content;
+      let items: any[] = [];
+      if (Array.isArray(content)) {
+        items = content;
+      } else if (content && typeof content === "object") {
+        // content could be object keyed by date or id
+        items = Object.values(content).flat();
+      }
+      if (items.length === 0) break;
+      all.push(...items);
+      // If we got fewer than perPage, no more pages
+      if (items.length < 200) break;
+      page++;
+    } catch (e) {
+      console.error(`appoints page ${page} error:`, e);
+      break;
+    }
+  }
+  return all;
+}
+
+// ─── Fetch ALL sales with pagination ───────────────────────────
+async function fetchAllSales(headers: Record<string, string>, dateStart: string, dateEnd: string): Promise<any[]> {
+  const all: any[] = [];
+  let page = 1;
+  while (page <= 20) {
+    try {
+      const url = `${FEEGOW_BASE}/financial/list-sales?date_start=${dateStart}&date_end=${dateEnd}&unidade_id=0&page=${page}&perPage=500`;
+      const data = await feegowFetch(url, headers);
+      const items = Array.isArray(data.content) ? data.content : [];
+      if (items.length === 0) break;
+      all.push(...items);
+      if (items.length < 500) break;
+      page++;
+    } catch {
+      break;
+    }
+  }
+  return all;
+}
+
+// ─── Fetch invoices for financial detail ───────────────────────
+async function fetchInvoices(headers: Record<string, string>, dateStart: string, dateEnd: string): Promise<any[]> {
+  const fd = toFeegowDate(dateStart);
+  const td = toFeegowDate(dateEnd);
+  try {
+    const url = `${FEEGOW_BASE}/financial/list-invoice?data_start=${fd}&data_end=${td}&tipo_transacao=C`;
+    const data = await feegowFetch(url, headers);
+    const content = data.content;
+    if (Array.isArray(content)) return content;
+    if (content && typeof content === "object") return Object.values(content);
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+// ─── MAIN SYNC: Appoints + Sales/Invoices cross-reference ─────
+async function syncPeriod(
   supabase: any,
   clinicaId: string,
   headers: Record<string, string>,
@@ -213,133 +262,89 @@ async function syncInvoices(
     itens_criados: 0, pagamentos_criados: 0,
   };
 
-  const canProceed = await acquireLock(supabase, clinicaId, "invoices", dateStart, dateEnd);
+  const canProceed = await acquireLock(supabase, clinicaId, "sync", dateStart, dateEnd);
   if (!canProceed) return { ...stats, erros: ["Sync já em andamento para este período."] };
 
-  const logId = await createLog(supabase, clinicaId, "feegow_sales", "sync_invoices", "list-invoice+appoints", makeRequestHash(clinicaId, "invoices", dateStart, dateEnd));
+  const logId = await createLog(supabase, clinicaId, "feegow_sales", "sync_period", "appoints+sales+invoices", makeRequestHash(clinicaId, "sync", dateStart, dateEnd));
 
   try {
     const lookups = await buildLookupMaps(supabase, clinicaId);
 
-    // ── Step 1: Fetch invoices (try DD-MM-YYYY format first) ──
-    let invoices: any[] = [];
-    const fd = toFeegowDate(dateStart);
-    const td = toFeegowDate(dateEnd);
-    
-    // Audit showed: tipo_transacao is required (C/D/T), dates must be DD-MM-YYYY
-    const urlVariants = [
-      `${FEEGOW_BASE}/financial/list-invoice?date_start=${fd}&date_end=${td}&tipo_transacao=C`,
-      `${FEEGOW_BASE}/financial/list-invoice?date_start=${fd}&date_end=${td}&tipo_transacao=T`,
-    ];
+    // ── Step 1: Fetch all data sources in parallel ──
+    const [appoints, sales, invoices] = await Promise.all([
+      fetchAllAppoints(headers, dateStart, dateEnd),
+      fetchAllSales(headers, dateStart, dateEnd),
+      fetchInvoices(headers, dateStart, dateEnd),
+    ]);
 
-    for (const url of urlVariants) {
-      try {
-        const data = await feegowFetch(url, headers);
-        const content = data.content;
-        if (Array.isArray(content)) invoices = content;
-        else if (content && typeof content === "object") {
-          // Sometimes it returns an object keyed by invoice_id
-          invoices = Object.values(content);
-        }
-        if (invoices.length > 0) {
-          stats.detalhes.invoice_url_used = url;
-          break;
-        }
-      } catch (e: any) {
-        stats.detalhes[`invoice_url_error_${urlVariants.indexOf(url)}`] = e.message;
+    stats.detalhes.appoints_count = appoints.length;
+    stats.detalhes.sales_count = sales.length;
+    stats.detalhes.invoices_count = invoices.length;
+
+    // ── Step 2: Build sales lookup by invoice_id ──
+    const salesByInvoice = new Map<number, { amount: number; timestamp: string }>();
+    for (const s of sales) {
+      if (s.invoice_id) {
+        salesByInvoice.set(Number(s.invoice_id), {
+          amount: Number(s.amount || 0) || 0,
+          timestamp: s.timestamp || "",
+        });
       }
     }
-    stats.detalhes.invoices_fetched = invoices.length;
 
-    // ── Step 2: Fetch appointments for metadata complement ──
-    const appointMap = new Map<string, any>(); // invoice_id or date+patient → appt data
-    try {
-      const url = `${FEEGOW_BASE}/appoints/search?data_start=${fd}&data_end=${td}&list_procedures=1`;
-      const data = await feegowFetch(url, headers);
-      const appts = Array.isArray(data.content) ? data.content : [];
-      for (const appt of appts) {
-        // Map by agendamento_id
-        const key = String(appt.agendamento_id || appt.id || "");
-        if (key) appointMap.set(key, appt);
-        // Also map by patient+date for cross-reference
-        const patKey = `${appt.paciente_id || appt.patient_id}_${appt.data || appt.date}`;
-        if (!appointMap.has(patKey)) appointMap.set(patKey, appt);
-      }
-      stats.detalhes.appoints_for_metadata = appts.length;
-    } catch (e: any) {
-      stats.detalhes.appoints_error = e.message;
-    }
-
-    // ── Step 3: Process each invoice ──
-    const vendaUpserts: any[] = [];
-    const itemUpserts: any[] = [];
-    const pagUpserts: any[] = [];
-    const newPatients = new Map<string, string>();
-
+    // ── Step 3: Build invoice lookup by id ──
+    const invoiceById = new Map<string, any>();
     for (const inv of invoices) {
-      stats.processados++;
-      const invoiceId = String(inv.invoice_id || inv.id || inv.fatura_id || `unk_${stats.processados}`);
+      const id = String(inv.invoice_id || inv.id || inv.fatura_id || "");
+      if (id) invoiceById.set(id, inv);
+    }
 
-      // Parse date
+    // ── Step 4: Process each appointment ──
+    const newPatients = new Map<string, string>();
+    const vendaBatch: any[] = [];
+    const itemBatch: any[] = [];
+    const pagBatch: any[] = [];
+    const seenFeegow = new Set<string>();
+
+    for (const appt of appoints) {
+      const feegowId = String(appt.agendamento_id || appt.id || "");
+      if (!feegowId || seenFeegow.has(feegowId)) continue;
+      seenFeegow.add(feegowId);
+      stats.processados++;
+
+      // Parse date (DD-MM-YYYY → YYYY-MM-DD)
       let dataComp = dateStart;
-      const rawDate = inv.date || inv.data || inv.created_at || inv.timestamp || "";
+      const rawDate = appt.data || appt.date || "";
       if (rawDate) {
         if (rawDate.includes("-") && rawDate.split("-")[0].length === 2) {
           const [d, m, y] = rawDate.split("-");
           dataComp = `${y}-${m}-${d}`;
         } else if (rawDate.includes("-")) {
-          dataComp = rawDate.split(" ")[0]; // YYYY-MM-DD HH:MM:SS
-        } else if (rawDate.includes("/")) {
-          const [d, m, y] = rawDate.split("/");
-          dataComp = `${y}-${m}-${d}`;
+          dataComp = rawDate.split(" ")[0];
         }
       }
 
-      // Financial values (invoice level)
-      const valorBruto = Number(inv.total || inv.amount || inv.valor || inv.valor_bruto || inv.gross_amount || 0) || 0;
-      const desconto = Number(inv.discount || inv.desconto || inv.discount_amount || 0) || 0;
-      const valorLiquido = Number(inv.net_amount || inv.valor_liquido || 0) || (valorBruto - desconto);
+      // Doctor & Specialty
+      const profFid = String(appt.profissional_id || appt.professional_id || "");
+      let medicoId: string | null = null;
+      let especialidade: string | null = null;
+      if (profFid && lookups.medicos.has(profFid)) {
+        const med = lookups.medicos.get(profFid)!;
+        medicoId = med.id;
+        especialidade = med.especialidade;
+      }
 
       // Patient
-      const patFid = String(inv.patient_id || inv.paciente_id || "");
+      const patFid = String(appt.paciente_id || appt.patient_id || "");
       let pacienteId: string | null = null;
       if (patFid && lookups.pacientes.has(patFid)) {
         pacienteId = lookups.pacientes.get(patFid)!;
       } else if (patFid) {
-        newPatients.set(patFid, inv.patient_name || inv.paciente_nome || "Paciente Feegow");
+        newPatients.set(patFid, "Paciente Feegow");
       }
 
-      // Doctor (from invoice or appt complement)
-      const profFid = String(inv.professional_id || inv.profissional_id || "");
-      let medicoId: string | null = null;
-      let especialidade: string | null = inv.specialty_name || inv.especialidade || null;
-      if (profFid && lookups.medicos.has(profFid)) {
-        const med = lookups.medicos.get(profFid)!;
-        medicoId = med.id;
-        if (!especialidade) especialidade = med.especialidade;
-      }
-
-      // Try appt complement
-      if (!medicoId || !especialidade) {
-        const patDateKey = `${patFid}_${rawDate}`;
-        const appt = appointMap.get(invoiceId) || appointMap.get(patDateKey);
-        if (appt) {
-          if (!medicoId) {
-            const apptProf = String(appt.profissional_id || appt.professional_id || "");
-            if (apptProf && lookups.medicos.has(apptProf)) {
-              const med = lookups.medicos.get(apptProf)!;
-              medicoId = med.id;
-              if (!especialidade) especialidade = med.especialidade;
-            }
-          }
-          if (!especialidade) {
-            especialidade = appt.especialidade_nome || appt.specialty_name || null;
-          }
-        }
-      }
-
-      // Insurance/Convenio
-      const convFid = String(inv.insurance_id || inv.convenio_id || "");
+      // Convenio
+      const convFid = String(appt.convenio_id || "");
       let convenioId: string | null = null;
       let convenioNome: string | null = null;
       if (convFid && lookups.convenios.has(convFid)) {
@@ -348,84 +353,153 @@ async function syncInvoices(
         convenioNome = conv.nome;
       }
 
-      // ── Process items (procedures) ──
-      const items = inv.items || inv.itens || inv.procedures || [];
-      let procedimentoNome: string | null = null;
-      if (Array.isArray(items) && items.length > 0) {
-        for (let idx = 0; idx < items.length; idx++) {
-          const item = items[idx];
-          const itemId = String(item.item_id || item.id || `${invoiceId}_${idx}`);
-          const itemBruto = Number(item.amount || item.valor || item.price || item.valor_bruto || 0) || 0;
-          const itemDesconto = Number(item.discount || item.desconto || 0) || 0;
-          const itemLiquido = Number(item.net_amount || item.valor_liquido || 0) || (itemBruto - itemDesconto);
-          const itemNome = item.procedure_name || item.procedimento_nome || item.name || item.nome || null;
+      // Procedure
+      const procs = appt.procedimentos || appt.procedures || [];
+      const procNome = procs[0]?.nome || procs[0]?.name || null;
+      const procId = procs[0]?.procedimentoID || procs[0]?.procedimento_id || appt.procedimento_id || null;
 
-          if (!procedimentoNome && itemNome) procedimentoNome = itemNome;
-
-          // Item doctor override
-          let itemMedico = medicoId;
-          const itemProfFid = String(item.professional_id || item.profissional_id || "");
-          if (itemProfFid && lookups.medicos.has(itemProfFid)) {
-            itemMedico = lookups.medicos.get(itemProfFid)!.id;
-          }
-
-          itemUpserts.push({
-            clinica_id: clinicaId,
-            feegow_invoice_id: invoiceId,
-            feegow_item_id: itemId,
-            data_competencia: dataComp,
-            procedimento_id: String(item.procedure_id || item.procedimento_id || ""),
-            procedimento_nome: itemNome,
-            tipo: item.type || item.tipo || null,
-            quantidade: Number(item.quantity || item.quantidade || 1) || 1,
-            valor_bruto_item: itemBruto,
-            desconto_item: itemDesconto,
-            valor_liquido_item: itemLiquido,
-            medico_id: itemMedico,
-            especialidade: especialidade,
-            convenio: convenioNome,
-          });
-        }
-      } else {
-        // No item breakdown → create single synthetic item
-        itemUpserts.push({
-          clinica_id: clinicaId,
-          feegow_invoice_id: invoiceId,
-          feegow_item_id: `${invoiceId}_0`,
-          data_competencia: dataComp,
-          procedimento_id: null,
-          procedimento_nome: inv.description || inv.descricao || null,
-          tipo: null,
-          quantidade: 1,
-          valor_bruto_item: valorBruto,
-          desconto_item: desconto,
-          valor_liquido_item: valorLiquido,
-          medico_id: medicoId,
-          especialidade,
-          convenio: convenioNome,
-        });
-        procedimentoNome = inv.description || inv.descricao || null;
-      }
-
-      // ── Process payments ──
-      const payments = inv.payments || inv.pagamentos || [];
+      // Financial: try to find matching invoice or sale
+      // The appt may not have invoice_id directly, try cross-ref
+      let valorBruto = Number(appt.valor || appt.value || appt.valor_total_agendamento || 0) || 0;
+      let desconto = 0;
       let valorPago = 0;
       let formaPagEnum: string | null = null;
-      if (Array.isArray(payments) && payments.length > 0) {
+
+      // Check if there's a linked invoice (by invoice_id if present)
+      const invId = appt.invoice_id || appt.fatura_id;
+      if (invId) {
+        const sale = salesByInvoice.get(Number(invId));
+        if (sale && sale.amount > 0) valorBruto = sale.amount;
+
+        const inv = invoiceById.get(String(invId));
+        if (inv) {
+          if (!valorBruto) valorBruto = Number(inv.total || inv.amount || inv.valor || 0) || 0;
+          desconto = Number(inv.discount || inv.desconto || 0) || 0;
+
+          // Process payments from invoice
+          const payments = inv.payments || inv.pagamentos || [];
+          if (Array.isArray(payments)) {
+            for (let idx = 0; idx < payments.length; idx++) {
+              const pmt = payments[idx];
+              const pmtValor = Number(pmt.amount || pmt.valor || pmt.value || 0) || 0;
+              valorPago += pmtValor;
+              const fmtId = Number(pmt.forma_pagamento_id || pmt.payment_method_id || 0);
+              const fmtEnum = mapFormaPagamento(fmtId, pmt.payment_method || pmt.forma_pagamento);
+              if (!formaPagEnum && fmtEnum) formaPagEnum = fmtEnum;
+
+              pagBatch.push({
+                clinica_id: clinicaId,
+                feegow_invoice_id: String(invId),
+                feegow_payment_id: String(pmt.payment_id || pmt.id || `${invId}_p${idx}`),
+                data_pagamento: dataComp,
+                forma_pagamento_feegow_id: fmtId || null,
+                forma_pagamento: fmtEnum,
+                valor_pago: pmtValor,
+                parcelas: Number(pmt.installments || pmt.parcelas || 1) || 1,
+                bandeira: pmt.brand || pmt.bandeira || null,
+                nsu_tid_autorizacao: pmt.nsu || pmt.tid || pmt.authorization || null,
+              });
+            }
+          }
+        }
+      }
+
+      // Status
+      const statusMap: Record<number, string> = {
+        1: "agendado", 2: "confirmado", 3: "atendido", 4: "em_espera",
+        5: "em_atendimento", 6: "faltou", 7: "cancelado_paciente", 11: "cancelado", 16: "cancelado",
+        22: "atendido",
+      };
+      const statusPresenca = statusMap[Number(appt.status_id || 0)] || "agendado";
+
+      // Status recebimento
+      const statusRecebimento = valorPago >= valorBruto && valorBruto > 0 ? "recebido" : "a_receber";
+
+      // vendas_itens
+      itemBatch.push({
+        clinica_id: clinicaId,
+        feegow_invoice_id: String(invId || feegowId),
+        feegow_item_id: `${feegowId}_0`,
+        data_competencia: dataComp,
+        procedimento_id: procId ? String(procId) : null,
+        procedimento_nome: procNome,
+        tipo: null,
+        quantidade: procs.length || 1,
+        valor_bruto_item: valorBruto,
+        desconto_item: desconto,
+        valor_liquido_item: valorBruto - desconto,
+        medico_id: medicoId,
+        especialidade,
+        convenio: convenioNome,
+      });
+
+      // transacoes_vendas (valor_liquido is GENERATED, don't include)
+      vendaBatch.push({
+        clinica_id: clinicaId,
+        feegow_id: feegowId,
+        invoice_id: invId ? String(invId) : null,
+        origem: "feegow",
+        data_competencia: dataComp,
+        valor_bruto: valorBruto,
+        desconto,
+        valor_pago: valorPago,
+        descricao: procNome || `Agendamento #${feegowId}`,
+        procedimento: procNome,
+        especialidade,
+        medico_id: medicoId,
+        convenio_id: convenioId,
+        paciente_id: pacienteId,
+        forma_pagamento_enum: formaPagEnum,
+        status_presenca: statusPresenca,
+        status_recebimento: statusRecebimento,
+        quantidade: procs.length || 1,
+        parcelas: 1,
+      });
+    }
+
+    // ── Also process invoices NOT matched to any appt ──
+    for (const inv of invoices) {
+      const invId = String(inv.invoice_id || inv.id || inv.fatura_id || "");
+      // Check if already processed via appt
+      if (!invId) continue;
+      const fgId = `inv_${invId}`;
+      if (seenFeegow.has(fgId)) continue;
+      seenFeegow.add(fgId);
+      stats.processados++;
+
+      let dataComp = dateStart;
+      const rawDate = inv.date || inv.data || inv.created_at || inv.timestamp || "";
+      if (rawDate) {
+        if (rawDate.includes("-") && rawDate.split("-")[0].length === 2) {
+          const [d, m, y] = rawDate.split("-");
+          dataComp = `${y}-${m}-${d}`;
+        } else if (rawDate.includes("-")) {
+          dataComp = rawDate.split(" ")[0];
+        } else if (rawDate.includes("/")) {
+          const [d, m, y] = rawDate.split("/");
+          dataComp = `${y}-${m}-${d}`;
+        }
+      }
+
+      const valorBruto = Number(inv.total || inv.amount || inv.valor || 0) || 0;
+      const desconto = Number(inv.discount || inv.desconto || 0) || 0;
+      let valorPago = 0;
+      let formaPagEnum: string | null = null;
+
+      const payments = inv.payments || inv.pagamentos || [];
+      if (Array.isArray(payments)) {
         for (let idx = 0; idx < payments.length; idx++) {
           const pmt = payments[idx];
-          const pmtId = String(pmt.payment_id || pmt.id || `${invoiceId}_p${idx}`);
           const pmtValor = Number(pmt.amount || pmt.valor || pmt.value || 0) || 0;
           valorPago += pmtValor;
-
           const fmtId = Number(pmt.forma_pagamento_id || pmt.payment_method_id || 0);
-          const fmtEnum = mapFormaPagamento(fmtId, pmt.payment_method || pmt.forma_pagamento || "");
+          const fmtEnum = mapFormaPagamento(fmtId, pmt.payment_method || pmt.forma_pagamento);
           if (!formaPagEnum && fmtEnum) formaPagEnum = fmtEnum;
 
-          pagUpserts.push({
+          pagBatch.push({
             clinica_id: clinicaId,
-            feegow_invoice_id: invoiceId,
-            feegow_payment_id: pmtId,
+            feegow_invoice_id: invId,
+            feegow_payment_id: String(pmt.payment_id || pmt.id || `${invId}_p${idx}`),
             data_pagamento: dataComp,
             forma_pagamento_feegow_id: fmtId || null,
             forma_pagamento: fmtEnum,
@@ -437,39 +511,56 @@ async function syncInvoices(
         }
       }
 
-      // Payment from top-level if no sub-payments
-      if (!formaPagEnum) {
-        const fpId = Number(inv.payment_method_id || inv.forma_pagamento_id || 0);
-        formaPagEnum = mapFormaPagamento(fpId, inv.payment_method || inv.forma_pagamento || "");
-      }
-      if (valorPago === 0 && valorBruto > 0 && formaPagEnum && formaPagEnum !== "convenio_nf") {
-        valorPago = valorBruto; // Assume paid if payment method exists
+      // Doctor from invoice
+      const profFid = String(inv.professional_id || inv.profissional_id || "");
+      let medicoId: string | null = null;
+      let especialidade: string | null = null;
+      if (profFid && lookups.medicos.has(profFid)) {
+        const med = lookups.medicos.get(profFid)!;
+        medicoId = med.id;
+        especialidade = med.especialidade;
       }
 
-      // Determine status
-      const statusRecebimento = valorPago >= valorBruto ? "recebido" : "a_receber";
+      const patFid = String(inv.patient_id || inv.paciente_id || "");
+      let pacienteId: string | null = null;
+      if (patFid && lookups.pacientes.has(patFid)) {
+        pacienteId = lookups.pacientes.get(patFid)!;
+      }
 
-      // ── Aggregate record for transacoes_vendas ──
-      vendaUpserts.push({
+      itemBatch.push({
         clinica_id: clinicaId,
-        feegow_id: invoiceId,
-        invoice_id: invoiceId,
+        feegow_invoice_id: invId,
+        feegow_item_id: `${invId}_0`,
+        data_competencia: dataComp,
+        procedimento_id: null,
+        procedimento_nome: inv.description || inv.descricao || null,
+        tipo: null,
+        quantidade: 1,
+        valor_bruto_item: valorBruto,
+        desconto_item: desconto,
+        valor_liquido_item: valorBruto - desconto,
+        medico_id: medicoId,
+        especialidade,
+        convenio: null,
+      });
+
+      vendaBatch.push({
+        clinica_id: clinicaId,
+        feegow_id: fgId,
+        invoice_id: invId,
         origem: "feegow_invoice",
         data_competencia: dataComp,
         valor_bruto: valorBruto,
         desconto,
-        valor_liquido: valorLiquido,
         valor_pago: valorPago,
-        descricao: procedimentoNome || `Invoice #${invoiceId}`,
-        procedimento: procedimentoNome,
+        descricao: inv.description || inv.descricao || `Invoice #${invId}`,
+        procedimento: inv.description || null,
         especialidade,
         medico_id: medicoId,
-        convenio_id: convenioId,
         paciente_id: pacienteId,
-        forma_pagamento: inv.payment_method || inv.forma_pagamento || null,
         forma_pagamento_enum: formaPagEnum,
-        status_recebimento: statusRecebimento,
-        quantidade: items.length || 1,
+        status_recebimento: valorPago >= valorBruto && valorBruto > 0 ? "recebido" : "a_receber",
+        quantidade: 1,
         parcelas: 1,
       });
     }
@@ -488,11 +579,11 @@ async function syncInvoices(
           if (p.feegow_id) lookups.pacientes.set(p.feegow_id, p.id);
         }
         // Backfill paciente_id
-        for (const v of vendaUpserts) {
+        for (const v of vendaBatch) {
           if (!v.paciente_id) {
-            const inv = invoices.find((i: any) => String(i.invoice_id || i.id || i.fatura_id) === v.feegow_id);
-            if (inv) {
-              const pf = String(inv.patient_id || inv.paciente_id || "");
+            const appt = appoints.find((a: any) => String(a.agendamento_id || a.id) === v.feegow_id);
+            if (appt) {
+              const pf = String(appt.paciente_id || "");
               if (pf && lookups.pacientes.has(pf)) v.paciente_id = lookups.pacientes.get(pf)!;
             }
           }
@@ -501,36 +592,34 @@ async function syncInvoices(
       stats.detalhes.patients_auto_created = newPatients.size;
     }
 
-    // ── Upsert vendas_itens in batches ──
+    // ── Batch upserts ──
     const BATCH = 100;
-    for (let i = 0; i < itemUpserts.length; i += BATCH) {
-      const batch = itemUpserts.slice(i, i + BATCH);
+
+    for (let i = 0; i < itemBatch.length; i += BATCH) {
+      const batch = itemBatch.slice(i, i + BATCH);
       const { error } = await supabase
         .from("vendas_itens")
         .upsert(batch, { onConflict: "clinica_id,feegow_invoice_id,feegow_item_id" });
-      if (error) stats.erros.push(`vendas_itens batch ${i / BATCH}: ${error.message}`);
+      if (error) stats.erros.push(`vendas_itens: ${error.message}`);
       else stats.itens_criados += batch.length;
     }
 
-    // ── Upsert vendas_pagamentos in batches ──
-    for (let i = 0; i < pagUpserts.length; i += BATCH) {
-      const batch = pagUpserts.slice(i, i + BATCH);
+    for (let i = 0; i < pagBatch.length; i += BATCH) {
+      const batch = pagBatch.slice(i, i + BATCH);
       const { error } = await supabase
         .from("vendas_pagamentos")
         .upsert(batch, { onConflict: "clinica_id,feegow_invoice_id,feegow_payment_id" });
-      if (error) stats.erros.push(`vendas_pagamentos batch ${i / BATCH}: ${error.message}`);
+      if (error) stats.erros.push(`vendas_pagamentos: ${error.message}`);
       else stats.pagamentos_criados += batch.length;
     }
 
-    // ── Upsert transacoes_vendas in batches ──
-    for (let i = 0; i < vendaUpserts.length; i += BATCH) {
-      const batch = vendaUpserts.slice(i, i + BATCH);
+    for (let i = 0; i < vendaBatch.length; i += BATCH) {
+      const batch = vendaBatch.slice(i, i + BATCH);
       const { data: upserted, error } = await supabase
         .from("transacoes_vendas")
         .upsert(batch, { onConflict: "clinica_id,feegow_id", ignoreDuplicates: false })
         .select("id");
       if (error) {
-        stats.erros.push(`transacoes_vendas batch ${i / BATCH}: ${error.message}`);
         // Fallback one-by-one
         for (const record of batch) {
           const { data: existing } = await supabase
@@ -551,112 +640,18 @@ async function syncInvoices(
       }
     }
 
-    // ── If invoices returned 0, fallback to appoints/search + list-sales ──
-    if (invoices.length === 0) {
-      stats.detalhes.fallback = "appoints_search";
-      const fallbackResult = await syncSalesFallback(supabase, clinicaId, headers, dateStart, dateEnd, lookups);
-      stats.processados += fallbackResult.processados;
-      stats.criados += fallbackResult.criados;
-      stats.atualizados += fallbackResult.atualizados;
-      stats.erros.push(...fallbackResult.erros);
-      stats.detalhes.fallback_stats = fallbackResult;
-    }
-
     stats.detalhes = {
       ...stats.detalhes,
       dateStart, dateEnd,
-      total_invoices: invoices.length,
-      total_items: itemUpserts.length,
-      total_payments: pagUpserts.length,
-      total_vendas: vendaUpserts.length,
+      total_vendas: vendaBatch.length,
+      total_items: itemBatch.length,
+      total_payments: pagBatch.length,
     };
 
     await finishLog(supabase, logId, stats.erros.length > 0 ? "erro_parcial" : "sucesso", stats);
   } catch (e: any) {
     stats.erros.push(e.message);
     await finishLog(supabase, logId, "erro", stats);
-  }
-
-  return stats;
-}
-
-// ─── FALLBACK: appoints/search + list-sales ────────────────────
-async function syncSalesFallback(
-  supabase: any, clinicaId: string, headers: Record<string, string>,
-  dateStart: string, dateEnd: string, lookups: any
-) {
-  const stats = { processados: 0, criados: 0, atualizados: 0, erros: [] as string[] };
-
-  // Fetch appoints
-  let appts: any[] = [];
-  try {
-    const url = `${FEEGOW_BASE}/appoints/search?data_start=${toFeegowDate(dateStart)}&data_end=${toFeegowDate(dateEnd)}&list_procedures=1`;
-    const data = await feegowFetch(url, headers);
-    appts = Array.isArray(data.content) ? data.content : [];
-  } catch (e: any) { stats.erros.push(`appoints fallback: ${e.message}`); }
-
-  // Fetch sales for financial
-  const salesMap = new Map<number, number>();
-  try {
-    const url = `${FEEGOW_BASE}/financial/list-sales?date_start=${dateStart}&date_end=${dateEnd}&unidade_id=0`;
-    const data = await feegowFetch(url, headers);
-    const items = Array.isArray(data.content) ? data.content : [];
-    for (const item of items) {
-      if (item.invoice_id) salesMap.set(Number(item.invoice_id), Number(item.amount || 0));
-    }
-  } catch (_) {}
-
-  const statusMap: Record<number, string> = {
-    1: "agendado", 2: "confirmado", 3: "atendido", 4: "em_espera",
-    5: "em_atendimento", 6: "faltou", 7: "cancelado_paciente", 11: "cancelado", 16: "cancelado",
-  };
-
-  const batch: any[] = [];
-  for (const appt of appts) {
-    stats.processados++;
-    const feegowId = String(appt.agendamento_id || appt.id || "");
-    if (!feegowId) continue;
-
-    let dataComp = dateStart;
-    const rawDate = appt.data || appt.date;
-    if (rawDate?.includes("-")) {
-      const parts = rawDate.split("-");
-      dataComp = parts[0].length === 2 ? `${parts[2]}-${parts[1]}-${parts[0]}` : rawDate;
-    }
-
-    const valor = Number(appt.valor ?? appt.value ?? 0) || 0;
-    const profFid = String(appt.profissional_id || appt.professional_id || "");
-    const med = profFid ? lookups.medicos.get(profFid) : null;
-
-    const procs = appt.procedimentos || appt.procedures || [];
-    const procNome = procs[0]?.nome || procs[0]?.name || null;
-
-    batch.push({
-      clinica_id: clinicaId,
-      feegow_id: feegowId,
-      origem: "feegow_appoints",
-      data_competencia: dataComp,
-      valor_bruto: valor,
-      desconto: 0,
-      valor_liquido: valor,
-      valor_pago: 0,
-      descricao: procNome,
-      procedimento: procNome,
-      especialidade: appt.especialidade_nome || (med?.especialidade) || null,
-      medico_id: med?.id || null,
-      status_presenca: statusMap[Number(appt.status_id || 0)] || "agendado",
-      quantidade: procs.length || 1,
-    });
-  }
-
-  for (let i = 0; i < batch.length; i += 100) {
-    const chunk = batch.slice(i, i + 100);
-    const { data: upserted, error } = await supabase
-      .from("transacoes_vendas")
-      .upsert(chunk, { onConflict: "clinica_id,feegow_id", ignoreDuplicates: false })
-      .select("id");
-    if (error) stats.erros.push(`Fallback upsert: ${error.message}`);
-    else stats.atualizados += (upserted?.length || chunk.length);
   }
 
   return stats;
@@ -682,8 +677,6 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const clinicaId = body.clinica_id;
     const action = body.action || "full";
-    const dateStart = body.date_start;
-    const dateEnd = body.date_end;
 
     if (!clinicaId) {
       return new Response(JSON.stringify({ error: "clinica_id obrigatório" }), {
@@ -701,29 +694,28 @@ Deno.serve(async (req) => {
 
     // Metadata sync
     if (action === "full" || action === "metadata") {
-      const includePatients = body.include_patients === true;
       const logId = await createLog(supabase, clinicaId, "feegow_metadata", "sync_metadata", "professional+salas+insurance");
-      const metaResult = await syncMetadata(supabase, clinicaId, feegowHeaders, includePatients);
+      const metaResult = await syncMetadata(supabase, clinicaId, feegowHeaders);
       await finishLog(supabase, logId, metaResult.errors.length > 0 ? "erro_parcial" : "sucesso", {
-        processados: metaResult.medicos + metaResult.salas + metaResult.convenios + metaResult.pacientes,
-        criados: metaResult.medicos + metaResult.salas + metaResult.convenios + metaResult.pacientes,
+        processados: metaResult.medicos + metaResult.salas + metaResult.convenios,
+        criados: metaResult.medicos + metaResult.salas + metaResult.convenios,
         erros: metaResult.errors, detalhes: metaResult,
       });
       response.metadata = metaResult;
     }
 
-    // Sales/Invoice sync (daily chunks for performance)
+    // Sales sync (daily chunks for performance)
     if (action === "full" || action === "sales" || action === "invoices") {
-      const end = dateEnd || new Date().toISOString().split("T")[0];
-      const start = dateStart || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+      const end = body.date_end || new Date().toISOString().split("T")[0];
+      const start = body.date_start || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
 
-      // Daily chunks to avoid timeout and handle pagination limits
+      // 3-day chunks to avoid timeout
       const chunks: { start: string; end: string }[] = [];
       let chunkStart = new Date(start);
       const endDate = new Date(end);
       while (chunkStart <= endDate) {
         const chunkEnd = new Date(chunkStart);
-        chunkEnd.setDate(chunkEnd.getDate() + 2); // 3-day chunks
+        chunkEnd.setDate(chunkEnd.getDate() + 2);
         if (chunkEnd > endDate) chunkEnd.setTime(endDate.getTime());
         chunks.push({
           start: chunkStart.toISOString().split("T")[0],
@@ -737,11 +729,9 @@ Deno.serve(async (req) => {
         processados: 0, criados: 0, atualizados: 0, ignorados: 0,
         erros: [] as string[], itens_criados: 0, pagamentos_criados: 0,
       };
-      const allResults: any[] = [];
 
       for (const chunk of chunks) {
-        const result = await syncInvoices(supabase, clinicaId, feegowHeaders, chunk.start, chunk.end);
-        allResults.push({ ...chunk, ...result });
+        const result = await syncPeriod(supabase, clinicaId, feegowHeaders, chunk.start, chunk.end);
         totalStats.processados += result.processados;
         totalStats.criados += result.criados;
         totalStats.atualizados += result.atualizados;
@@ -751,7 +741,7 @@ Deno.serve(async (req) => {
         totalStats.erros.push(...result.erros);
       }
 
-      response.sales = { ...totalStats, chunks_count: chunks.length, chunks: allResults };
+      response.sales = { ...totalStats, chunks_count: chunks.length };
     }
 
     // Update integration status
