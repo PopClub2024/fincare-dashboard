@@ -581,8 +581,123 @@ export type Database = {
           },
         ]
       }
+      divida_pagamentos: {
+        Row: {
+          clinica_id: string
+          conta_pagar_id: string | null
+          created_at: string
+          data_pagamento: string
+          divida_id: string
+          id: string
+          juros_pago: number | null
+          observacao: string | null
+          origem: Database["public"]["Enums"]["origem_pagamento"]
+          principal_amortizado: number | null
+          transacao_bancaria_id: string | null
+          valor_pago: number
+        }
+        Insert: {
+          clinica_id: string
+          conta_pagar_id?: string | null
+          created_at?: string
+          data_pagamento: string
+          divida_id: string
+          id?: string
+          juros_pago?: number | null
+          observacao?: string | null
+          origem?: Database["public"]["Enums"]["origem_pagamento"]
+          principal_amortizado?: number | null
+          transacao_bancaria_id?: string | null
+          valor_pago: number
+        }
+        Update: {
+          clinica_id?: string
+          conta_pagar_id?: string | null
+          created_at?: string
+          data_pagamento?: string
+          divida_id?: string
+          id?: string
+          juros_pago?: number | null
+          observacao?: string | null
+          origem?: Database["public"]["Enums"]["origem_pagamento"]
+          principal_amortizado?: number | null
+          transacao_bancaria_id?: string | null
+          valor_pago?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "divida_pagamentos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "divida_pagamentos_divida_id_fkey"
+            columns: ["divida_id"]
+            isOneToOne: false
+            referencedRelation: "dividas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      divida_parcelas_previstas: {
+        Row: {
+          amortizacao: number | null
+          clinica_id: string
+          competencia: string
+          created_at: string
+          divida_id: string
+          id: string
+          juros: number | null
+          pago: boolean
+          pmt: number
+          saldo_devedor: number | null
+        }
+        Insert: {
+          amortizacao?: number | null
+          clinica_id: string
+          competencia: string
+          created_at?: string
+          divida_id: string
+          id?: string
+          juros?: number | null
+          pago?: boolean
+          pmt: number
+          saldo_devedor?: number | null
+        }
+        Update: {
+          amortizacao?: number | null
+          clinica_id?: string
+          competencia?: string
+          created_at?: string
+          divida_id?: string
+          id?: string
+          juros?: number | null
+          pago?: boolean
+          pmt?: number
+          saldo_devedor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "divida_parcelas_previstas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "divida_parcelas_previstas_divida_id_fkey"
+            columns: ["divida_id"]
+            isOneToOne: false
+            referencedRelation: "dividas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dividas: {
         Row: {
+          ativo: boolean
           clinica_id: string
           created_at: string
           credor: string
@@ -591,12 +706,15 @@ export type Database = {
           data_vencimento: string | null
           descricao: string | null
           id: string
+          nome: string | null
           saldo: number
+          saldo_inicial: number | null
           taxa_juros: number | null
           tipo: Database["public"]["Enums"]["tipo_divida"]
           updated_at: string
         }
         Insert: {
+          ativo?: boolean
           clinica_id: string
           created_at?: string
           credor: string
@@ -605,12 +723,15 @@ export type Database = {
           data_vencimento?: string | null
           descricao?: string | null
           id?: string
+          nome?: string | null
           saldo: number
+          saldo_inicial?: number | null
           taxa_juros?: number | null
           tipo?: Database["public"]["Enums"]["tipo_divida"]
           updated_at?: string
         }
         Update: {
+          ativo?: boolean
           clinica_id?: string
           created_at?: string
           credor?: string
@@ -619,7 +740,9 @@ export type Database = {
           data_vencimento?: string | null
           descricao?: string | null
           id?: string
+          nome?: string | null
           saldo?: number
+          saldo_inicial?: number | null
           taxa_juros?: number | null
           tipo?: Database["public"]["Enums"]["tipo_divida"]
           updated_at?: string
@@ -734,6 +857,101 @@ export type Database = {
             columns: ["plano_contas_id"]
             isOneToOne: false
             referencedRelation: "plano_contas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      imposto_pagamentos: {
+        Row: {
+          clinica_id: string
+          conta_pagar_id: string | null
+          created_at: string
+          data_pagamento: string
+          id: string
+          impostos_devidos_id: string
+          origem: Database["public"]["Enums"]["origem_pagamento"]
+          transacao_bancaria_id: string | null
+          valor_pago: number
+        }
+        Insert: {
+          clinica_id: string
+          conta_pagar_id?: string | null
+          created_at?: string
+          data_pagamento: string
+          id?: string
+          impostos_devidos_id: string
+          origem?: Database["public"]["Enums"]["origem_pagamento"]
+          transacao_bancaria_id?: string | null
+          valor_pago: number
+        }
+        Update: {
+          clinica_id?: string
+          conta_pagar_id?: string | null
+          created_at?: string
+          data_pagamento?: string
+          id?: string
+          impostos_devidos_id?: string
+          origem?: Database["public"]["Enums"]["origem_pagamento"]
+          transacao_bancaria_id?: string | null
+          valor_pago?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "imposto_pagamentos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "imposto_pagamentos_impostos_devidos_id_fkey"
+            columns: ["impostos_devidos_id"]
+            isOneToOne: false
+            referencedRelation: "impostos_devidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      impostos_devidos: {
+        Row: {
+          clinica_id: string
+          competencia: string
+          created_at: string
+          id: string
+          imposto: Database["public"]["Enums"]["tipo_imposto"]
+          status: Database["public"]["Enums"]["status_imposto"]
+          valor_devido: number
+          valor_pago: number
+          vencimento: string | null
+        }
+        Insert: {
+          clinica_id: string
+          competencia: string
+          created_at?: string
+          id?: string
+          imposto: Database["public"]["Enums"]["tipo_imposto"]
+          status?: Database["public"]["Enums"]["status_imposto"]
+          valor_devido: number
+          valor_pago?: number
+          vencimento?: string | null
+        }
+        Update: {
+          clinica_id?: string
+          competencia?: string
+          created_at?: string
+          id?: string
+          imposto?: Database["public"]["Enums"]["tipo_imposto"]
+          status?: Database["public"]["Enums"]["status_imposto"]
+          valor_devido?: number
+          valor_pago?: number
+          vencimento?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "impostos_devidos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
             referencedColumns: ["id"]
           },
         ]
@@ -1068,6 +1286,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "receita_canal_mensal_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      regras_conciliacao_debito: {
+        Row: {
+          ativo: boolean
+          clinica_id: string
+          created_at: string
+          descricao_regex: string
+          destino_id: string | null
+          id: string
+          imposto: Database["public"]["Enums"]["tipo_imposto"] | null
+          janela_dias: number
+          prioridade: number
+          tipo_destino: Database["public"]["Enums"]["tipo_destino_regra"]
+          tolerancia_abs: number
+          tolerancia_pct: number
+        }
+        Insert: {
+          ativo?: boolean
+          clinica_id: string
+          created_at?: string
+          descricao_regex: string
+          destino_id?: string | null
+          id?: string
+          imposto?: Database["public"]["Enums"]["tipo_imposto"] | null
+          janela_dias?: number
+          prioridade?: number
+          tipo_destino: Database["public"]["Enums"]["tipo_destino_regra"]
+          tolerancia_abs?: number
+          tolerancia_pct?: number
+        }
+        Update: {
+          ativo?: boolean
+          clinica_id?: string
+          created_at?: string
+          descricao_regex?: string
+          destino_id?: string | null
+          id?: string
+          imposto?: Database["public"]["Enums"]["tipo_imposto"] | null
+          janela_dias?: number
+          prioridade?: number
+          tipo_destino?: Database["public"]["Enums"]["tipo_destino_regra"]
+          tolerancia_abs?: number
+          tolerancia_pct?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "regras_conciliacao_debito_clinica_id_fkey"
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
@@ -1548,9 +1819,11 @@ export type Database = {
         | "exame"
         | "procedimento"
         | "produto"
+      origem_pagamento: "extrato" | "manual"
       status_comprovante: "pendente" | "processado" | "erro" | "rejeitado"
       status_conciliacao: "pendente" | "conciliado" | "divergente"
       status_conta: "pendente" | "pago" | "vencido" | "cancelado"
+      status_imposto: "aberto" | "parcial" | "pago"
       status_integracao: "ativo" | "inativo" | "erro"
       status_lancamento_cp:
         | "a_classificar"
@@ -1561,7 +1834,9 @@ export type Database = {
       status_recebimento: "a_receber" | "recebido" | "inadimplente" | "glosado"
       status_sync: "em_andamento" | "sucesso" | "erro"
       tipo_despesa: "fixa" | "variavel"
+      tipo_destino_regra: "divida" | "imposto" | "conta_pagar"
       tipo_divida: "curto_prazo" | "longo_prazo"
+      tipo_imposto: "simples" | "fgts" | "inss" | "iss"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1714,9 +1989,11 @@ export const Constants = {
         "procedimento",
         "produto",
       ],
+      origem_pagamento: ["extrato", "manual"],
       status_comprovante: ["pendente", "processado", "erro", "rejeitado"],
       status_conciliacao: ["pendente", "conciliado", "divergente"],
       status_conta: ["pendente", "pago", "vencido", "cancelado"],
+      status_imposto: ["aberto", "parcial", "pago"],
       status_integracao: ["ativo", "inativo", "erro"],
       status_lancamento_cp: [
         "a_classificar",
@@ -1728,7 +2005,9 @@ export const Constants = {
       status_recebimento: ["a_receber", "recebido", "inadimplente", "glosado"],
       status_sync: ["em_andamento", "sucesso", "erro"],
       tipo_despesa: ["fixa", "variavel"],
+      tipo_destino_regra: ["divida", "imposto", "conta_pagar"],
       tipo_divida: ["curto_prazo", "longo_prazo"],
+      tipo_imposto: ["simples", "fgts", "inss", "iss"],
     },
   },
 } as const
