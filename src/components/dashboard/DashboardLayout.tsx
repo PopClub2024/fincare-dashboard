@@ -22,6 +22,7 @@ const navSections: NavSection[] = [
     title: "Visão Geral",
     items: [
       { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+      { label: "CFO Assistente", icon: Zap, path: "/cfo-assistente" },
     ],
   },
   {

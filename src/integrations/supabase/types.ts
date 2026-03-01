@@ -119,6 +119,53 @@ export type Database = {
           },
         ]
       }
+      alertas_eventos: {
+        Row: {
+          clinica_id: string
+          contexto: Json | null
+          created_at: string
+          descricao: string | null
+          id: string
+          resolvido_em: string | null
+          severidade: Database["public"]["Enums"]["severidade_alerta"]
+          status: Database["public"]["Enums"]["status_alerta"]
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          clinica_id: string
+          contexto?: Json | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          resolvido_em?: string | null
+          severidade?: Database["public"]["Enums"]["severidade_alerta"]
+          status?: Database["public"]["Enums"]["status_alerta"]
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          clinica_id?: string
+          contexto?: Json | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          resolvido_em?: string | null
+          severidade?: Database["public"]["Enums"]["severidade_alerta"]
+          status?: Database["public"]["Enums"]["status_alerta"]
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alertas_eventos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       arquivos_importados: {
         Row: {
           arquivo_url: string | null
@@ -203,6 +250,94 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "auditoria_integracoes_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      autofix_logs: {
+        Row: {
+          acao: string
+          clinica_id: string
+          created_at: string
+          dados_antes: Json | null
+          dados_depois: Json | null
+          entidade_id: string | null
+          entidade_tipo: string | null
+          id: string
+          tipo: string
+          user_id: string | null
+        }
+        Insert: {
+          acao: string
+          clinica_id: string
+          created_at?: string
+          dados_antes?: Json | null
+          dados_depois?: Json | null
+          entidade_id?: string | null
+          entidade_tipo?: string | null
+          id?: string
+          tipo?: string
+          user_id?: string | null
+        }
+        Update: {
+          acao?: string
+          clinica_id?: string
+          created_at?: string
+          dados_antes?: Json | null
+          dados_depois?: Json | null
+          entidade_id?: string | null
+          entidade_tipo?: string | null
+          id?: string
+          tipo?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autofix_logs_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      autopilot_runs: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          status: Database["public"]["Enums"]["status_autopilot"]
+          steps: Json | null
+          trigger: Database["public"]["Enums"]["trigger_autopilot"]
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["status_autopilot"]
+          steps?: Json | null
+          trigger?: Database["public"]["Enums"]["trigger_autopilot"]
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["status_autopilot"]
+          steps?: Json | null
+          trigger?: Database["public"]["Enums"]["trigger_autopilot"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autopilot_runs_clinica_id_fkey"
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
@@ -1815,6 +1950,53 @@ export type Database = {
           },
         ]
       }
+      insights_ia: {
+        Row: {
+          acoes_recomendadas: Json | null
+          clinica_id: string
+          created_at: string
+          data_quality_score: number | null
+          id: string
+          input_context: Json | null
+          output_markdown: string | null
+          periodo_fim: string
+          periodo_inicio: string
+          tipo: Database["public"]["Enums"]["tipo_insight"]
+        }
+        Insert: {
+          acoes_recomendadas?: Json | null
+          clinica_id: string
+          created_at?: string
+          data_quality_score?: number | null
+          id?: string
+          input_context?: Json | null
+          output_markdown?: string | null
+          periodo_fim: string
+          periodo_inicio: string
+          tipo?: Database["public"]["Enums"]["tipo_insight"]
+        }
+        Update: {
+          acoes_recomendadas?: Json | null
+          clinica_id?: string
+          created_at?: string
+          data_quality_score?: number | null
+          id?: string
+          input_context?: Json | null
+          output_markdown?: string | null
+          periodo_fim?: string
+          periodo_inicio?: string
+          tipo?: Database["public"]["Enums"]["tipo_insight"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insights_ia_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integracao_logs: {
         Row: {
           acao: string | null
@@ -1921,6 +2103,47 @@ export type Database = {
           },
         ]
       }
+      kpi_snapshots: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          data_quality_breakdown: Json | null
+          data_quality_score: number | null
+          granularidade: string
+          id: string
+          kpis: Json
+          periodo: string
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          data_quality_breakdown?: Json | null
+          data_quality_score?: number | null
+          granularidade?: string
+          id?: string
+          kpis?: Json
+          periodo: string
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          data_quality_breakdown?: Json | null
+          data_quality_score?: number | null
+          granularidade?: string
+          id?: string
+          kpis?: Json
+          periodo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_snapshots_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketing_gastos: {
         Row: {
           campanha: string | null
@@ -2005,6 +2228,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "medicos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metas_financeiras: {
+        Row: {
+          clinica_id: string
+          competencia: string
+          created_at: string
+          id: string
+          indicador: string
+          meta_valor: number
+          observacao: string | null
+          realizado_valor: number | null
+          unidade: string | null
+          updated_at: string
+        }
+        Insert: {
+          clinica_id: string
+          competencia: string
+          created_at?: string
+          id?: string
+          indicador: string
+          meta_valor?: number
+          observacao?: string | null
+          realizado_valor?: number | null
+          unidade?: string | null
+          updated_at?: string
+        }
+        Update: {
+          clinica_id?: string
+          competencia?: string
+          created_at?: string
+          id?: string
+          indicador?: string
+          meta_valor?: number
+          observacao?: string | null
+          realizado_valor?: number | null
+          unidade?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metas_financeiras_clinica_id_fkey"
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
@@ -3329,6 +3599,10 @@ export type Database = {
         Args: { _convenio_id?: string; _end_date: string; _start_date: string }
         Returns: Json
       }
+      get_data_quality_score: {
+        Args: { _end_date: string; _start_date: string }
+        Returns: Json
+      }
       get_discount_summary: {
         Args: { _end_date: string; _start_date: string }
         Returns: Json
@@ -3398,6 +3672,9 @@ export type Database = {
         | "outros"
       origem_pagamento: "extrato" | "manual"
       origem_preco: "importado_planilha" | "manual" | "sync_feegow"
+      severidade_alerta: "info" | "warning" | "critical"
+      status_alerta: "aberto" | "resolvido" | "ignorado"
+      status_autopilot: "sucesso" | "erro" | "parcial" | "em_andamento"
       status_comprovante: "pendente" | "processado" | "erro" | "rejeitado"
       status_conciliacao: "pendente" | "conciliado" | "divergente"
       status_conta: "pendente" | "pago" | "vencido" | "cancelado"
@@ -3441,9 +3718,22 @@ export type Database = {
       tipo_divida: "curto_prazo" | "longo_prazo"
       tipo_funcionario: "clt" | "diarista" | "estagiario" | "prestador"
       tipo_imposto: "simples" | "fgts" | "inss" | "iss"
+      tipo_insight:
+        | "analise_completa"
+        | "alertas"
+        | "conciliacao"
+        | "metas"
+        | "resumo_diario"
+        | "resumo_mensal"
       tipo_pagador: "particular" | "convenio"
       tipo_procedimento: "consulta" | "exame" | "procedimento" | "servico"
       tipo_sync_feegow: "sync_procedimentos" | "update_precos"
+      trigger_autopilot:
+        | "feegow_sync"
+        | "import_bank"
+        | "import_getnet"
+        | "reconciliation"
+        | "manual"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3604,6 +3894,9 @@ export const Constants = {
       ],
       origem_pagamento: ["extrato", "manual"],
       origem_preco: ["importado_planilha", "manual", "sync_feegow"],
+      severidade_alerta: ["info", "warning", "critical"],
+      status_alerta: ["aberto", "resolvido", "ignorado"],
+      status_autopilot: ["sucesso", "erro", "parcial", "em_andamento"],
       status_comprovante: ["pendente", "processado", "erro", "rejeitado"],
       status_conciliacao: ["pendente", "conciliado", "divergente"],
       status_conta: ["pendente", "pago", "vencido", "cancelado"],
@@ -3651,9 +3944,24 @@ export const Constants = {
       tipo_divida: ["curto_prazo", "longo_prazo"],
       tipo_funcionario: ["clt", "diarista", "estagiario", "prestador"],
       tipo_imposto: ["simples", "fgts", "inss", "iss"],
+      tipo_insight: [
+        "analise_completa",
+        "alertas",
+        "conciliacao",
+        "metas",
+        "resumo_diario",
+        "resumo_mensal",
+      ],
       tipo_pagador: ["particular", "convenio"],
       tipo_procedimento: ["consulta", "exame", "procedimento", "servico"],
       tipo_sync_feegow: ["sync_procedimentos", "update_precos"],
+      trigger_autopilot: [
+        "feegow_sync",
+        "import_bank",
+        "import_getnet",
+        "reconciliation",
+        "manual",
+      ],
     },
   },
 } as const
