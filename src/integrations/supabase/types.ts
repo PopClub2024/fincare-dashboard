@@ -175,6 +175,41 @@ export type Database = {
           },
         ]
       }
+      auditoria_integracoes: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          id: string
+          integracao: string
+          periodo: string
+          relatorio_json: Json
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          id?: string
+          integracao: string
+          periodo: string
+          relatorio_json?: Json
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          id?: string
+          integracao?: string
+          periodo?: string
+          relatorio_json?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auditoria_integracoes_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       caixa_historico_mensal: {
         Row: {
           ano: number
@@ -2697,6 +2732,7 @@ export type Database = {
           updated_at: string
           valor_bruto: number
           valor_liquido: number | null
+          valor_pago: number | null
         }
         Insert: {
           banco_referencia?: string | null
@@ -2739,6 +2775,7 @@ export type Database = {
           updated_at?: string
           valor_bruto?: number
           valor_liquido?: number | null
+          valor_pago?: number | null
         }
         Update: {
           banco_referencia?: string | null
@@ -2781,6 +2818,7 @@ export type Database = {
           updated_at?: string
           valor_bruto?: number
           valor_liquido?: number | null
+          valor_pago?: number | null
         }
         Relationships: [
           {
@@ -2879,6 +2917,135 @@ export type Database = {
           },
         ]
       }
+      vendas_itens: {
+        Row: {
+          clinica_id: string
+          convenio: string | null
+          created_at: string
+          data_competencia: string
+          desconto_item: number
+          especialidade: string | null
+          feegow_invoice_id: string
+          feegow_item_id: string
+          id: string
+          medico_id: string | null
+          procedimento_id: string | null
+          procedimento_nome: string | null
+          quantidade: number
+          tipo: string | null
+          valor_bruto_item: number
+          valor_liquido_item: number
+        }
+        Insert: {
+          clinica_id: string
+          convenio?: string | null
+          created_at?: string
+          data_competencia: string
+          desconto_item?: number
+          especialidade?: string | null
+          feegow_invoice_id: string
+          feegow_item_id: string
+          id?: string
+          medico_id?: string | null
+          procedimento_id?: string | null
+          procedimento_nome?: string | null
+          quantidade?: number
+          tipo?: string | null
+          valor_bruto_item?: number
+          valor_liquido_item?: number
+        }
+        Update: {
+          clinica_id?: string
+          convenio?: string | null
+          created_at?: string
+          data_competencia?: string
+          desconto_item?: number
+          especialidade?: string | null
+          feegow_invoice_id?: string
+          feegow_item_id?: string
+          id?: string
+          medico_id?: string | null
+          procedimento_id?: string | null
+          procedimento_nome?: string | null
+          quantidade?: number
+          tipo?: string | null
+          valor_bruto_item?: number
+          valor_liquido_item?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_itens_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_itens_medico_id_fkey"
+            columns: ["medico_id"]
+            isOneToOne: false
+            referencedRelation: "medicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendas_pagamentos: {
+        Row: {
+          bandeira: string | null
+          clinica_id: string
+          created_at: string
+          data_pagamento: string | null
+          feegow_invoice_id: string
+          feegow_payment_id: string | null
+          forma_pagamento: Database["public"]["Enums"]["forma_pagamento"] | null
+          forma_pagamento_feegow_id: number | null
+          id: string
+          nsu_tid_autorizacao: string | null
+          parcelas: number | null
+          valor_pago: number
+        }
+        Insert: {
+          bandeira?: string | null
+          clinica_id: string
+          created_at?: string
+          data_pagamento?: string | null
+          feegow_invoice_id: string
+          feegow_payment_id?: string | null
+          forma_pagamento?:
+            | Database["public"]["Enums"]["forma_pagamento"]
+            | null
+          forma_pagamento_feegow_id?: number | null
+          id?: string
+          nsu_tid_autorizacao?: string | null
+          parcelas?: number | null
+          valor_pago?: number
+        }
+        Update: {
+          bandeira?: string | null
+          clinica_id?: string
+          created_at?: string
+          data_pagamento?: string | null
+          feegow_invoice_id?: string
+          feegow_payment_id?: string | null
+          forma_pagamento?:
+            | Database["public"]["Enums"]["forma_pagamento"]
+            | null
+          forma_pagamento_feegow_id?: number | null
+          id?: string
+          nsu_tid_autorizacao?: string | null
+          parcelas?: number | null
+          valor_pago?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_pagamentos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -2890,6 +3057,10 @@ export type Database = {
       }
       get_cash_kpis: {
         Args: { _end_date: string; _filtros?: Json; _start_date: string }
+        Returns: Json
+      }
+      get_discount_summary: {
+        Args: { _end_date: string; _start_date: string }
         Returns: Json
       }
       get_dre: {
