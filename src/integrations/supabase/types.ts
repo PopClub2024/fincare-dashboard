@@ -1152,6 +1152,71 @@ export type Database = {
           },
         ]
       }
+      integracao_logs: {
+        Row: {
+          acao: string | null
+          clinica_id: string
+          created_at: string
+          detalhes: Json | null
+          endpoint: string | null
+          erros: Json | null
+          fim: string | null
+          id: string
+          inicio: string
+          integracao: string
+          registros_atualizados: number | null
+          registros_criados: number | null
+          registros_ignorados: number | null
+          registros_processados: number | null
+          request_hash: string | null
+          status: string
+        }
+        Insert: {
+          acao?: string | null
+          clinica_id: string
+          created_at?: string
+          detalhes?: Json | null
+          endpoint?: string | null
+          erros?: Json | null
+          fim?: string | null
+          id?: string
+          inicio?: string
+          integracao: string
+          registros_atualizados?: number | null
+          registros_criados?: number | null
+          registros_ignorados?: number | null
+          registros_processados?: number | null
+          request_hash?: string | null
+          status?: string
+        }
+        Update: {
+          acao?: string | null
+          clinica_id?: string
+          created_at?: string
+          detalhes?: Json | null
+          endpoint?: string | null
+          erros?: Json | null
+          fim?: string | null
+          id?: string
+          inicio?: string
+          integracao?: string
+          registros_atualizados?: number | null
+          registros_criados?: number | null
+          registros_ignorados?: number | null
+          registros_processados?: number | null
+          request_hash?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracao_logs_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integracoes: {
         Row: {
           clinica_id: string
@@ -2102,9 +2167,11 @@ export type Database = {
             | null
           id: string
           impostos_taxas: number
+          invoice_id: string | null
           linha_receita: Database["public"]["Enums"]["linha_receita"] | null
           medico_id: string | null
           observacao: string | null
+          origem: string | null
           paciente_id: string | null
           parcela_atual: number | null
           parcelas: number | null
@@ -2140,9 +2207,11 @@ export type Database = {
             | null
           id?: string
           impostos_taxas?: number
+          invoice_id?: string | null
           linha_receita?: Database["public"]["Enums"]["linha_receita"] | null
           medico_id?: string | null
           observacao?: string | null
+          origem?: string | null
           paciente_id?: string | null
           parcela_atual?: number | null
           parcelas?: number | null
@@ -2180,9 +2249,11 @@ export type Database = {
             | null
           id?: string
           impostos_taxas?: number
+          invoice_id?: string | null
           linha_receita?: Database["public"]["Enums"]["linha_receita"] | null
           medico_id?: string | null
           observacao?: string | null
+          origem?: string | null
           paciente_id?: string | null
           parcela_atual?: number | null
           parcelas?: number | null
