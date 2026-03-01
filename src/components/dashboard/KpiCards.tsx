@@ -1,6 +1,12 @@
-import { TrendingUp, TrendingDown, DollarSign, BarChart3, PieChart, Activity } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, BarChart3, PieChart, Activity, CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDreKpis } from "@/hooks/useDreKpis";
+import { useCashKpis } from "@/hooks/useCashKpis";
+import { Badge } from "@/components/ui/badge";
+
+const fmt = (v: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
 interface KpiCardProps {
   title: string;
@@ -9,9 +15,10 @@ interface KpiCardProps {
   trend?: number;
   icon: React.ReactNode;
   formula?: string;
+  fonte?: string;
 }
 
-function KpiCard({ title, value, subtitle, trend, icon, formula }: KpiCardProps) {
+function KpiCard({ title, value, subtitle, trend, icon, formula, fonte }: KpiCardProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -26,13 +33,14 @@ function KpiCard({ title, value, subtitle, trend, icon, formula }: KpiCardProps)
               <div className="flex flex-col items-end gap-1">
                 <div className="rounded-lg bg-accent p-2">{icon}</div>
                 {trend !== undefined && (
-                  <span className={`flex items-center text-xs font-medium ${trend >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                  <span className={`flex items-center text-xs font-medium ${trend >= 0 ? "text-emerald-600" : "text-destructive"}`}>
                     {trend >= 0 ? <TrendingUp className="mr-0.5 h-3 w-3" /> : <TrendingDown className="mr-0.5 h-3 w-3" />}
                     {Math.abs(trend).toFixed(1)}%
                   </span>
                 )}
               </div>
             </div>
+            {fonte && <Badge variant="outline" className="mt-2 text-[10px]">{fonte}</Badge>}
           </CardContent>
         </Card>
       </TooltipTrigger>
@@ -41,14 +49,84 @@ function KpiCard({ title, value, subtitle, trend, icon, formula }: KpiCardProps)
   );
 }
 
-export default function KpiCards() {
+interface Props {
+  dateFrom: Date;
+  dateTo: Date;
+}
+
+export default function KpiCards({ dateFrom, dateTo }: Props) {
+  const { data: dre, loading: dreLoading } = useDreKpis(dateFrom, dateTo);
+  const { data: cash, loading: cashLoading } = useCashKpis(dateFrom, dateTo);
+
+  const loading = dreLoading || cashLoading;
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Card key={i} className="border-0 shadow-md">
+            <CardContent className="p-5">
+              <div className="h-16 animate-pulse rounded bg-muted" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  const dreCards = dre?.cards;
+  const cashCards = cash?.cards;
+  const fonte = dreCards?.fonte === "historico" ? "📊 Histórico" : undefined;
+
+  const pe = dreCards?.pe || 0;
+  const mcPct = dreCards?.mc_pct || 0;
+
   const kpis: KpiCardProps[] = [
-    { title: "Receita Líquida", value: "R$ 0,00", icon: <DollarSign className="h-4 w-4 text-secondary" />, formula: "RL = Receita Bruta − Descontos − Impostos" },
-    { title: "EBITDA", value: "R$ 0,00", icon: <BarChart3 className="h-4 w-4 text-primary" />, formula: "EBITDA = RL − CSV − Custos Variáveis − Custos Fixos + Depreciação/Amortização" },
-    { title: "Margem Líquida", value: "0%", icon: <PieChart className="h-4 w-4 text-secondary" />, formula: "ML% = Lucro Líquido ÷ RL × 100" },
-    { title: "MC% / Ponto Equilíbrio", value: "0% / R$ 0", icon: <Activity className="h-4 w-4 text-primary" />, formula: "MC% = (RL − CSV) ÷ RL × 100 | PE = CF ÷ MC%" },
-    { title: "Fluxo de Caixa", value: "R$ 0,00", icon: <DollarSign className="h-4 w-4 text-secondary" />, formula: "Saldo = Entradas − Saídas no período" },
-    { title: "Conciliação", value: "0%", icon: <Activity className="h-4 w-4 text-primary" />, formula: "% = Transações conciliadas ÷ Total de transações × 100" },
+    {
+      title: "Receita Líquida",
+      value: fmt(dreCards?.rt || 0),
+      icon: <DollarSign className="h-4 w-4 text-secondary" />,
+      formula: "RL = Receita Bruta − Descontos − Impostos",
+      fonte,
+    },
+    {
+      title: "EBITDA",
+      value: fmt((dreCards?.mc || 0)),
+      subtitle: `MC ${mcPct}%`,
+      icon: <BarChart3 className="h-4 w-4 text-primary" />,
+      formula: "EBITDA ≈ MC = RT − Impostos − Taxa Cartão − Repasses Médicos",
+      fonte,
+    },
+    {
+      title: "Margem Líquida",
+      value: `${dreCards?.resultado_pct || 0}%`,
+      subtitle: fmt(dreCards?.resultado || 0),
+      icon: <PieChart className="h-4 w-4 text-secondary" />,
+      formula: "ML% = Resultado ÷ RT × 100",
+      fonte,
+    },
+    {
+      title: "MC% / Ponto Equilíbrio",
+      value: `${mcPct}% / ${fmt(pe)}`,
+      icon: <Activity className="h-4 w-4 text-primary" />,
+      formula: "MC% = (RT − CSV) ÷ RT × 100 | PE = CF ÷ MC%",
+      fonte,
+    },
+    {
+      title: "Fluxo de Caixa",
+      value: fmt(cashCards?.saldo_final || 0),
+      subtitle: `E: ${fmt(cashCards?.entradas || 0)} | S: ${fmt(cashCards?.saidas || 0)}`,
+      icon: <DollarSign className="h-4 w-4 text-secondary" />,
+      formula: "Saldo = Saldo Inicial + Entradas − Saídas no período",
+      fonte: cash?.has_bank_data ? "🏦 Banco" : cash?.has_live_data ? "📋 Live" : "📊 Histórico",
+    },
+    {
+      title: "Conciliação",
+      value: `${cashCards?.pct_conciliacao || 0}%`,
+      subtitle: cash?.has_bank_data ? `${fmt(cashCards?.entradas_conciliadas || 0)} conciliado` : "Importe extratos",
+      icon: <CheckCircle2 className="h-4 w-4 text-primary" />,
+      formula: "% = Transações conciliadas ÷ Total de transações × 100",
+    },
   ];
 
   return (
