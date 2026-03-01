@@ -23,6 +23,7 @@ import {
   DollarSign, TrendingUp, TrendingDown, BarChart3, Info, ChevronDown, ChevronRight, FileSpreadsheet,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import ReceitaPorCanal from "@/components/dashboard/ReceitaPorCanal";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -69,6 +70,44 @@ interface Props {
   filtros?: Record<string, string>;
 }
 
+const MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+function historicoToDreData(rows: any[]): DreData {
+  const mensal: DreMonth[] = rows.map((r) => ({
+    mes: `${r.ano}-${String(r.mes).padStart(2, "0")}`,
+    mes_label: `${MONTH_NAMES[r.mes - 1]}/${String(r.ano).slice(2)}`,
+    rt: Number(r.rt),
+    impostos: Number(r.impostos),
+    taxa_cartao: Number(r.taxa_cartao),
+    repasses: Number(r.repasses),
+    mc: Number(r.mc),
+    mc_pct: Number(r.mc_pct),
+    cf: Number(r.cf),
+    resultado: Number(r.resultado),
+    resultado_pct: Number(r.resultado_pct),
+    receita_cartao: 0,
+    imposto_info: r.regime_tributario ? { nome: r.regime_tributario } : {},
+    taxa_info: {},
+  }));
+
+  const cards: DreCards = {
+    rt: mensal.reduce((s, m) => s + m.rt, 0),
+    impostos: mensal.reduce((s, m) => s + m.impostos, 0),
+    taxa_cartao: mensal.reduce((s, m) => s + m.taxa_cartao, 0),
+    repasses: mensal.reduce((s, m) => s + m.repasses, 0),
+    mc: mensal.reduce((s, m) => s + m.mc, 0),
+    mc_pct: 0,
+    cf: mensal.reduce((s, m) => s + m.cf, 0),
+    resultado: mensal.reduce((s, m) => s + m.resultado, 0),
+    resultado_pct: 0,
+  };
+  const totalRt = cards.rt;
+  cards.mc_pct = totalRt > 0 ? Math.round((cards.mc / totalRt) * 1000) / 10 : 0;
+  cards.resultado_pct = totalRt > 0 ? Math.round((cards.resultado / totalRt) * 1000) / 10 : 0;
+
+  return { cards, mensal };
+}
+
 export default function TabDRE({ dateFrom, dateTo, filtros = {} }: Props) {
   const { clinicaId } = useAuth();
   const [data, setData] = useState<DreData | null>(null);
@@ -78,6 +117,8 @@ export default function TabDRE({ dateFrom, dateTo, filtros = {} }: Props) {
   const [compareValues, setCompareValues] = useState<Record<string, string>>({});
   const [compareMonth, setCompareMonth] = useState("");
 
+  const year = dateFrom.getFullYear();
+
   useEffect(() => {
     if (!clinicaId) return;
     fetchDre();
@@ -86,13 +127,39 @@ export default function TabDRE({ dateFrom, dateTo, filtros = {} }: Props) {
   const fetchDre = async () => {
     setLoading(true);
     try {
+      // Try live data first
       const { data: result, error } = await supabase.rpc("get_dre", {
         _start_date: format(dateFrom, "yyyy-MM-dd"),
         _end_date: format(dateTo, "yyyy-MM-dd"),
         _filtros: filtros,
       });
       if (error) throw error;
-      setData(result as unknown as DreData);
+      const live = result as unknown as DreData;
+
+      if (live.cards.rt > 0) {
+        setData(live);
+      } else {
+        // Fallback to historical
+        const startYear = dateFrom.getFullYear();
+        const startMonth = dateFrom.getMonth() + 1;
+        const endYear = dateTo.getFullYear();
+        const endMonth = dateTo.getMonth() + 1;
+
+        const { data: histRows } = await supabase
+          .from("dre_historico_mensal")
+          .select("*")
+          .eq("clinica_id", clinicaId)
+          .gte("ano", startYear)
+          .lte("ano", endYear)
+          .order("ano")
+          .order("mes");
+
+        if (histRows && histRows.length > 0) {
+          setData(historicoToDreData(histRows));
+        } else {
+          setData(live);
+        }
+      }
     } catch (e: any) {
       toast.error("Erro ao carregar DRE: " + e.message);
     } finally {
@@ -305,6 +372,9 @@ export default function TabDRE({ dateFrom, dateTo, filtros = {} }: Props) {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Receita por Canal */}
+      {clinicaId && <ReceitaPorCanal clinicaId={clinicaId} ano={year} compact />}
     </div>
   );
 }
