@@ -23,6 +23,9 @@ import CustoFixo from "./pages/CustoFixo";
 import Conciliacao from "./pages/Conciliacao";
 import Producao from "./pages/Producao";
 import FeegowIntegracao from "./pages/FeegowIntegracao";
+import Automacoes from "./pages/Automacoes";
+import ImportInbox from "./pages/ImportInbox";
+import DebugOperacao from "./pages/DebugOperacao";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +57,9 @@ const App = () => (
             <Route path="/conciliacao" element={<ProtectedRoute><Conciliacao /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="/integracoes/feegow" element={<ProtectedRoute><FeegowIntegracao /></ProtectedRoute>} />
+            <Route path="/operacao/automacoes" element={<ProtectedRoute><Automacoes /></ProtectedRoute>} />
+            <Route path="/importacoes/inbox" element={<ProtectedRoute><ImportInbox /></ProtectedRoute>} />
+            <Route path="/debug/operacao" element={<ProtectedRoute><DebugOperacao /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

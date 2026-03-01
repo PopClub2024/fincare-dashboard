@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   LayoutDashboard, Receipt, FileText, ArrowDownCircle, ArrowUpCircle,
   Settings, LogOut, Menu, X, FileBarChart, Wallet, Landmark,
-  Tag, Building2, GitCompare, Plug, ChevronRight,
+  Tag, Building2, GitCompare, Plug, ChevronRight, Zap, Inbox, ClipboardCheck,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { cn } from "@/lib/utils";
@@ -47,6 +47,14 @@ const navSections: NavSection[] = [
       { label: "Conciliação", icon: GitCompare, path: "/conciliacao" },
       { label: "Precificação", icon: Tag, path: "/precificacao" },
       { label: "Custo Fixo", icon: Building2, path: "/custo-fixo" },
+    ],
+  },
+  {
+    title: "Automação",
+    items: [
+      { label: "Central Automações", icon: Zap, path: "/operacao/automacoes" },
+      { label: "Inbox Importações", icon: Inbox, path: "/importacoes/inbox" },
+      { label: "Checklist Operação", icon: ClipboardCheck, path: "/debug/operacao" },
     ],
   },
   {
