@@ -1,1 +1,4 @@
 project_id = "bvezzatavermwhdlljyy"
+
+[functions.sync-feegow]
+verify_jwt = false

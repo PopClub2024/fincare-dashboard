@@ -959,6 +959,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      onboard_clinica: {
+        Args: {
+          _cnpj?: string
+          _email_usuario?: string
+          _nome_clinica: string
+          _nome_usuario?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "gestor" | "operador_caixa" | "visualizador"
