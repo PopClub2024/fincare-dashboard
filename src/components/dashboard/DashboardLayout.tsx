@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Receipt, FileText, ArrowDownCircle, ArrowUpCircle, Settings, LogOut, Menu, X, FileBarChart, Wallet, Landmark, Calculator, Tag, Building2, GitCompare } from "lucide-react";
+import { LayoutDashboard, Receipt, FileText, ArrowDownCircle, ArrowUpCircle, Settings, LogOut, Menu, X, FileBarChart, Wallet, Landmark, Calculator, Tag, Building2, GitCompare, Plug } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,7 @@ const navItems = [
   { label: "Conciliação", icon: GitCompare, path: "/conciliacao" },
   { label: "Precificação", icon: Tag, path: "/precificacao" },
   { label: "Custo Fixo", icon: Building2, path: "/custo-fixo" },
+  { label: "Feegow", icon: Plug, path: "/integracoes/feegow" },
   { label: "Configurações", icon: Settings, path: "/configuracoes" },
 ];
 

@@ -22,6 +22,7 @@ import Precificacao from "./pages/Precificacao";
 import CustoFixo from "./pages/CustoFixo";
 import Conciliacao from "./pages/Conciliacao";
 import Producao from "./pages/Producao";
+import FeegowIntegracao from "./pages/FeegowIntegracao";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/custo-fixo" element={<ProtectedRoute><CustoFixo /></ProtectedRoute>} />
             <Route path="/conciliacao" element={<ProtectedRoute><Conciliacao /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+            <Route path="/integracoes/feegow" element={<ProtectedRoute><FeegowIntegracao /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
