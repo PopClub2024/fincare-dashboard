@@ -20,9 +20,11 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import EditRecordDialog, { FieldDef } from "@/components/admin/EditRecordDialog";
 import { toast } from "sonner";
 import {
-  DollarSign, TrendingUp, TrendingDown, BarChart3, Info, ChevronDown, ChevronRight, CalendarDays, ArrowLeftRight,
+  DollarSign, TrendingUp, TrendingDown, BarChart3, Info, ChevronDown, ChevronRight, CalendarDays, ArrowLeftRight, Pencil,
 } from "lucide-react";
 import { format, subYears, startOfYear, endOfYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -69,7 +71,6 @@ interface DreData {
   mensal: DreMonth[];
 }
 
-// Convert historico rows to DreData format
 function historicoToDreData(rows: any[]): DreData {
   const mensal: DreMonth[] = rows.map((r) => ({
     mes: `${r.ano}-${String(r.mes).padStart(2, "0")}`,
@@ -107,7 +108,6 @@ function historicoToDreData(rows: any[]): DreData {
 }
 
 async function fetchDreYear(clinicaId: string, year: number): Promise<DreData | null> {
-  // Try live data first
   const { data: liveResult, error: liveError } = await supabase.rpc("get_dre", {
     _start_date: `${year}-01-01`,
     _end_date: `${year}-12-31`,
@@ -119,7 +119,6 @@ async function fetchDreYear(clinicaId: string, year: number): Promise<DreData | 
     if (live.cards.rt > 0) return live;
   }
 
-  // Fallback to historical data
   const { data: histRows, error: histError } = await supabase
     .from("dre_historico_mensal")
     .select("*")
@@ -131,12 +130,24 @@ async function fetchDreYear(clinicaId: string, year: number): Promise<DreData | 
     return historicoToDreData(histRows);
   }
 
-  // Return live data even if zero (for current year with no data yet)
   return liveResult ? (liveResult as unknown as DreData) : null;
 }
 
+const DRE_HIST_FIELDS: FieldDef[] = [
+  { key: "rt", label: "Receita Bruta (RT)", type: "number" },
+  { key: "impostos", label: "Impostos LP", type: "number" },
+  { key: "taxa_cartao", label: "Taxa Cartão", type: "number" },
+  { key: "repasses", label: "Repasses Médicos (CV)", type: "number" },
+  { key: "mc", label: "Margem de Contribuição", type: "number" },
+  { key: "mc_pct", label: "MC %", type: "number" },
+  { key: "cf", label: "Custo Fixo", type: "number" },
+  { key: "resultado", label: "Resultado", type: "number" },
+  { key: "resultado_pct", label: "Resultado %", type: "number" },
+];
+
 export default function DRE() {
   const { clinicaId } = useAuth();
+  const isAdmin = useIsAdmin();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [compareYear, setCompareYear] = useState(currentYear - 1);
@@ -144,6 +155,10 @@ export default function DRE() {
   const [compareData, setCompareData] = useState<DreData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  
+  // Admin edit state
+  const [histRecords, setHistRecords] = useState<any[]>([]);
+  const [editingRecord, setEditingRecord] = useState<any>(null);
 
   useEffect(() => {
     if (!clinicaId) return;
@@ -159,6 +174,17 @@ export default function DRE() {
       ]);
       setData(res1);
       setCompareData(res2);
+      
+      // Also fetch raw historico records for admin editing
+      if (isAdmin) {
+        const { data: hist } = await supabase
+          .from("dre_historico_mensal")
+          .select("*")
+          .eq("clinica_id", clinicaId!)
+          .eq("ano", year)
+          .order("mes");
+        setHistRecords(hist || []);
+      }
     } catch (e: any) {
       toast.error("Erro ao carregar DRE: " + e.message);
     } finally {
@@ -174,7 +200,11 @@ export default function DRE() {
     });
   };
 
-  // Build monthly comparison data
+  const getHistRecordForMonth = (mesStr: string) => {
+    const [y, m] = mesStr.split("-").map(Number);
+    return histRecords.find((r) => r.ano === y && r.mes === m);
+  };
+
   const monthlyComparison = useMemo(() => {
     if (!data?.mensal) return [];
     const compMap = new Map<number, DreMonth>();
@@ -195,7 +225,6 @@ export default function DRE() {
     });
   }, [data, compareData]);
 
-  // Chart data for evolution
   const chartData = useMemo(() => {
     return monthlyComparison.map((item) => ({
       name: item.month,
@@ -206,7 +235,6 @@ export default function DRE() {
     }));
   }, [monthlyComparison, year, compareYear]);
 
-  // MoM (month-over-month) data
   const momData = useMemo(() => {
     if (!data?.mensal || data.mensal.length < 2) return [];
     return data.mensal.map((m, i) => {
@@ -277,7 +305,7 @@ export default function DRE() {
           </div>
         </div>
 
-        {/* KPI Cards - Year total */}
+        {/* KPI Cards */}
         {data && (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <KpiCard label="Receita Bruta" value={fmt(data.cards.rt)} prevValue={compareData ? fmt(compareData.cards.rt) : undefined} variation={compareData && compareData.cards.rt > 0 ? ((data.cards.rt - compareData.cards.rt) / compareData.cards.rt) * 100 : undefined} />
@@ -300,14 +328,34 @@ export default function DRE() {
           {/* Tab: Análise Mensal */}
           <TabsContent value="mensal" className="space-y-4">
             <Card className="border-0 shadow-md">
-              <CardHeader><CardTitle className="text-lg">DRE Mensal — {year}</CardTitle></CardHeader>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">DRE Mensal — {year}</CardTitle>
+                  {isAdmin && histRecords.length > 0 && (
+                    <Badge variant="outline" className="gap-1 text-xs"><Pencil className="h-3 w-3" />Clique no mês para editar</Badge>
+                  )}
+                </div>
+              </CardHeader>
               <CardContent className="p-0 overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="sticky left-0 bg-card z-10 min-w-[200px]">Indicador</TableHead>
                       {data?.mensal.map((m) => (
-                        <TableHead key={m.mes} className="text-right min-w-[110px]">{m.mes_label}</TableHead>
+                        <TableHead key={m.mes} className="text-right min-w-[110px]">
+                          <div className="flex items-center justify-end gap-1">
+                            {m.mes_label}
+                            {isAdmin && getHistRecordForMonth(m.mes) && (
+                              <button
+                                onClick={() => setEditingRecord(getHistRecordForMonth(m.mes))}
+                                className="p-0.5 rounded hover:bg-accent"
+                                title="Editar mês"
+                              >
+                                <Pencil className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                              </button>
+                            )}
+                          </div>
+                        </TableHead>
                       ))}
                       <TableHead className="text-right min-w-[120px] font-bold">Total</TableHead>
                     </TableRow>
@@ -504,7 +552,6 @@ export default function DRE() {
                         </TableRow>
                       );
                     })}
-                    {/* Totals row */}
                     {data && compareData && (
                       <TableRow className="font-bold bg-accent/50">
                         <TableCell className="sticky left-0 bg-accent/50 z-10">TOTAL</TableCell>
@@ -532,6 +579,20 @@ export default function DRE() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Admin Edit Dialog */}
+      {editingRecord && (
+        <EditRecordDialog
+          open={!!editingRecord}
+          onOpenChange={(open) => !open && setEditingRecord(null)}
+          title={`DRE — ${MONTH_NAMES[editingRecord.mes - 1]}/${editingRecord.ano}`}
+          table="dre_historico_mensal"
+          recordId={editingRecord.id}
+          fields={DRE_HIST_FIELDS}
+          initialValues={editingRecord}
+          onSaved={fetchBothYears}
+        />
+      )}
     </DashboardLayout>
   );
 }
