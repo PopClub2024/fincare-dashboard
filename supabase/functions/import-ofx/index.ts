@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { clinica_id, ofx_content } = await req.json();
+    const { clinica_id, ofx_content, tipo } = await req.json();
     if (!clinica_id || !ofx_content) {
       return new Response(JSON.stringify({ error: "clinica_id and ofx_content required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -73,15 +73,51 @@ Deno.serve(async (req) => {
     let created = 0;
     let skipped = 0;
     let matched = 0;
+    let matched_recebiveis = 0;
     const errors: string[] = [];
 
     for (const txn of transactions) {
-      // Only process debits (negative amounts)
-      if (txn.amount >= 0) {
-        skipped++;
+      // CREDITS (positive amounts) → try to reconcile with receivables (PIX chave)
+      if (txn.amount > 0) {
+        const { data: matchVenda } = await supabase
+          .from("transacoes_vendas")
+          .select("id, valor_bruto")
+          .eq("clinica_id", clinica_id)
+          .eq("status_recebimento", "a_receber")
+          .gte("valor_bruto", txn.amount * 0.98)
+          .lte("valor_bruto", txn.amount * 1.02)
+          .eq("data_competencia", txn.date)
+          .limit(1)
+          .maybeSingle();
+
+        if (matchVenda) {
+          await supabase
+            .from("transacoes_vendas")
+            .update({
+              status_recebimento: "recebido",
+              status_conciliacao: "conciliado",
+            })
+            .eq("id", matchVenda.id);
+
+          await supabase
+            .from("transacoes_recebimentos")
+            .insert({
+              clinica_id,
+              venda_id: matchVenda.id,
+              valor: txn.amount,
+              data_recebimento: txn.date,
+              origem: "ofx_bancario",
+              referencia_externa: txn.fitid,
+              observacao: `Conciliação OFX - ${txn.name || txn.memo}`.trim(),
+            });
+          matched_recebiveis++;
+        } else {
+          skipped++;
+        }
         continue;
       }
 
+      // DEBITS (negative amounts) → reconcile with contas_pagar_lancamentos
       // Check if already imported
       const { data: existing } = await supabase
         .from("contas_pagar_lancamentos")
@@ -147,6 +183,7 @@ Deno.serve(async (req) => {
         total: transactions.length,
         created,
         matched,
+        matched_recebiveis,
         skipped,
         errors,
       }),
