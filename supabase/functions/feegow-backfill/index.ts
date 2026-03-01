@@ -28,6 +28,23 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Concurrency guard: check for running backfill in last 15 min
+    const { data: running } = await supabase
+      .from("integracao_logs")
+      .select("id")
+      .eq("clinica_id", clinicaId)
+      .eq("integracao", "feegow_backfill")
+      .eq("status", "em_andamento")
+      .gte("inicio", new Date(Date.now() - 15 * 60 * 1000).toISOString())
+      .limit(1);
+
+    if (running && running.length > 0) {
+      return new Response(
+        JSON.stringify({ error: "Backfill já em andamento. Aguarde a conclusão do processo atual." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Create master log
     const { data: masterLog } = await supabase
       .from("integracao_logs")
@@ -72,7 +89,6 @@ Deno.serve(async (req) => {
 
     for (const w of windows) {
       try {
-        // Call sync-feegow for each window
         const syncUrl = `${supabaseUrl}/functions/v1/sync-feegow`;
         const res = await fetch(syncUrl, {
           method: "POST",
@@ -88,7 +104,16 @@ Deno.serve(async (req) => {
           }),
         });
 
-        const data = await res.json();
+        const text = await res.text();
+        let data: any;
+        try { data = JSON.parse(text); } catch { data = { error: text.substring(0, 200) }; }
+
+        if (!res.ok) {
+          const errMsg = data?.error || `HTTP ${res.status}`;
+          totalErros.push(`Window ${w.start}-${w.end}: ${errMsg}`);
+          results.push({ window: `${w.start} → ${w.end}`, status: "erro", criados: 0, atualizados: 0, erros: [errMsg] });
+          continue;
+        }
 
         const criados = data?.sales?.criados || 0;
         const atualizados = data?.sales?.atualizados || 0;
@@ -105,7 +130,7 @@ Deno.serve(async (req) => {
           atualizados,
           erros,
         });
-      } catch (e) {
+      } catch (e: any) {
         totalErros.push(`Window ${w.start}-${w.end}: ${e.message}`);
         results.push({
           window: `${w.start} → ${w.end}`,
@@ -144,7 +169,7 @@ Deno.serve(async (req) => {
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
+  } catch (e: any) {
     console.error("feegow-backfill error:", e);
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500,
