@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.feegow-update-prices]
 verify_jwt = false
+
+[functions.import-getnet-csv]
+verify_jwt = false
