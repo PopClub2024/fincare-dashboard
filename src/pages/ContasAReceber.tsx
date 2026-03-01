@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,9 +11,14 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import {
   Search, CheckCircle2, Clock, AlertCircle, RefreshCw, CreditCard, Banknote, QrCode, Upload, FileText,
 } from "lucide-react";
@@ -95,7 +100,12 @@ function TabRecebiveis() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("todos");
   const [filterFonte, setFilterFonte] = useState("todos");
+  const [filterPagamento, setFilterPagamento] = useState("todos");
   const [syncing, setSyncing] = useState(false);
+  const [baixaDialog, setBaixaDialog] = useState<Recebivel | null>(null);
+  const [baixaLoading, setBaixaLoading] = useState(false);
+  const [baixaObs, setBaixaObs] = useState("");
+  const [baixaData, setBaixaData] = useState(format(new Date(), "yyyy-MM-dd"));
 
   useEffect(() => {
     if (!clinicaId) return;
@@ -151,6 +161,16 @@ function TabRecebiveis() {
     return "particular";
   };
 
+  const getFormaPagamentoCategory = (r: Recebivel): string => {
+    const fp = r.forma_pagamento_enum || r.forma_pagamento || "";
+    if (fp.includes("cartao_credito")) return "cartao_credito";
+    if (fp.includes("cartao_debito")) return "cartao_debito";
+    if (fp.includes("pix")) return "pix";
+    if (fp.includes("dinheiro")) return "dinheiro";
+    if (fp.includes("convenio")) return "convenio";
+    return "outro";
+  };
+
   const getMetodoPagamento = (r: Recebivel): string => {
     const fp = r.forma_pagamento_enum || r.forma_pagamento || "";
     if (fp.includes("cartao_credito")) return "Cartão Crédito";
@@ -182,6 +202,34 @@ function TabRecebiveis() {
     return { label: "—", icon: null, color: "text-muted-foreground" };
   };
 
+  const handleBaixa = useCallback(async () => {
+    if (!baixaDialog) return;
+    setBaixaLoading(true);
+    const { error } = await supabase
+      .from("transacoes_vendas")
+      .update({
+        status_recebimento: "recebido" as any,
+        data_caixa: baixaData,
+        observacao: baixaObs || null,
+      })
+      .eq("id", baixaDialog.id);
+
+    if (error) {
+      toast.error("Erro ao dar baixa: " + error.message);
+    } else {
+      toast.success("Baixa realizada com sucesso!");
+      setRecebiveis((prev) =>
+        prev.map((v) =>
+          v.id === baixaDialog.id ? { ...v, status_recebimento: "recebido" } : v
+        )
+      );
+    }
+    setBaixaLoading(false);
+    setBaixaDialog(null);
+    setBaixaObs("");
+    setBaixaData(format(new Date(), "yyyy-MM-dd"));
+  }, [baixaDialog, baixaData, baixaObs]);
+
   const filtered = useMemo(() => {
     return recebiveis.filter((r) => {
       const matchSearch = !searchTerm
@@ -191,9 +239,10 @@ function TabRecebiveis() {
         || r.medicos?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchStatus = filterStatus === "todos" || r.status_recebimento === filterStatus;
       const matchFonte = filterFonte === "todos" || getFonte(r) === filterFonte;
-      return matchSearch && matchStatus && matchFonte;
+      const matchPagamento = filterPagamento === "todos" || getFormaPagamentoCategory(r) === filterPagamento;
+      return matchSearch && matchStatus && matchFonte && matchPagamento;
     });
-  }, [recebiveis, searchTerm, filterStatus, filterFonte]);
+  }, [recebiveis, searchTerm, filterStatus, filterFonte, filterPagamento]);
 
   const totals = useMemo(() => {
     const total = filtered.reduce((s, r) => s + r.valor_bruto, 0);
@@ -270,6 +319,17 @@ function TabRecebiveis() {
             <SelectItem value="convenio">Convênio</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filterPagamento} onValueChange={setFilterPagamento}>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos Pagamentos</SelectItem>
+            <SelectItem value="dinheiro">Dinheiro</SelectItem>
+            <SelectItem value="pix">PIX</SelectItem>
+            <SelectItem value="cartao_credito">Cartão Crédito</SelectItem>
+            <SelectItem value="cartao_debito">Cartão Débito</SelectItem>
+            <SelectItem value="convenio">Convênio/NF</SelectItem>
+          </SelectContent>
+        </Select>
         <Button variant="outline" size="sm" className="gap-2" onClick={handleSyncFeegow} disabled={syncing}>
           <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
           Feegow
@@ -296,22 +356,24 @@ function TabRecebiveis() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
+               <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Paciente</TableHead>
                   <TableHead>Procedimento</TableHead>
                   <TableHead>Médico</TableHead>
                   <TableHead>Fonte</TableHead>
                   <TableHead>Pagamento</TableHead>
-                  <TableHead>Baixa</TableHead>
+                  <TableHead>Método Baixa</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-center">Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((r) => {
                   const fonte = getFonte(r);
                   const baixa = getBaixaMethod(r);
+                  const canBaixa = r.status_recebimento === "a_receber" || r.status_recebimento === "inadimplente";
                   return (
                     <TableRow key={r.id}>
                       <TableCell className="whitespace-nowrap text-sm">
@@ -344,6 +406,25 @@ function TabRecebiveis() {
                           {statusLabel[r.status_recebimento] || r.status_recebimento}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-center">
+                        {canBaixa ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            onClick={() => {
+                              setBaixaDialog(r);
+                              setBaixaData(format(new Date(), "yyyy-MM-dd"));
+                              setBaixaObs("");
+                            }}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Baixa
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -352,6 +433,56 @@ function TabRecebiveis() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog de Baixa Manual */}
+      <Dialog open={!!baixaDialog} onOpenChange={(open) => !open && setBaixaDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Baixa Manual de Receita</DialogTitle>
+            <DialogDescription>
+              Confirmar recebimento de {baixaDialog ? formatCurrency(baixaDialog.valor_bruto) : ""}
+              {baixaDialog?.procedimento ? ` — ${baixaDialog.procedimento}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs text-muted-foreground">Paciente</Label>
+                <p className="text-sm font-medium">{baixaDialog?.pacientes?.nome || "—"}</p>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Pagamento</Label>
+                <p className="text-sm font-medium">{baixaDialog ? getMetodoPagamento(baixaDialog) : ""}</p>
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="baixa-data-ar">Data do recebimento</Label>
+              <Input
+                id="baixa-data-ar"
+                type="date"
+                value={baixaData}
+                onChange={(e) => setBaixaData(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="baixa-obs-ar">Observação (opcional)</Label>
+              <Textarea
+                id="baixa-obs-ar"
+                placeholder="Ex: Recebido em dinheiro no caixa"
+                value={baixaObs}
+                onChange={(e) => setBaixaObs(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBaixaDialog(null)}>Cancelar</Button>
+            <Button onClick={handleBaixa} disabled={baixaLoading}>
+              {baixaLoading ? "Processando..." : "Confirmar Baixa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
