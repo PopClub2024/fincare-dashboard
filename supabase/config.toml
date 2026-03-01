@@ -3,6 +3,9 @@ project_id = "bvezzatavermwhdlljyy"
 [functions.sync-feegow]
 verify_jwt = false
 
+[functions.run-reconciliation]
+verify_jwt = false
+
 [functions.process-comprovante]
 verify_jwt = false
 
