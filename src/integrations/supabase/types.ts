@@ -1101,33 +1101,45 @@ export type Database = {
           clinica_id: string
           competencia: string
           created_at: string
+          dia_vencimento_fixo: number | null
+          forma_pagamento: string | null
           id: string
           imposto: Database["public"]["Enums"]["tipo_imposto"]
+          qtd_parcelas: number | null
           status: Database["public"]["Enums"]["status_imposto"]
           valor_devido: number
           valor_pago: number
+          valor_parcela: number | null
           vencimento: string | null
         }
         Insert: {
           clinica_id: string
           competencia: string
           created_at?: string
+          dia_vencimento_fixo?: number | null
+          forma_pagamento?: string | null
           id?: string
           imposto: Database["public"]["Enums"]["tipo_imposto"]
+          qtd_parcelas?: number | null
           status?: Database["public"]["Enums"]["status_imposto"]
           valor_devido: number
           valor_pago?: number
+          valor_parcela?: number | null
           vencimento?: string | null
         }
         Update: {
           clinica_id?: string
           competencia?: string
           created_at?: string
+          dia_vencimento_fixo?: number | null
+          forma_pagamento?: string | null
           id?: string
           imposto?: Database["public"]["Enums"]["tipo_imposto"]
+          qtd_parcelas?: number | null
           status?: Database["public"]["Enums"]["status_imposto"]
           valor_devido?: number
           valor_pago?: number
+          valor_parcela?: number | null
           vencimento?: string | null
         }
         Relationships: [

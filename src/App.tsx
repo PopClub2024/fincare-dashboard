@@ -44,7 +44,7 @@ const App = () => (
             <Route path="/contas-a-receber" element={<ProtectedRoute><ContasAReceber /></ProtectedRoute>} />
             <Route path="/contas-a-pagar" element={<ProtectedRoute><ContasAPagar /></ProtectedRoute>} />
             <Route path="/endividamento" element={<ProtectedRoute><Endividamento /></ProtectedRoute>} />
-            <Route path="/impostos" element={<ProtectedRoute><Impostos /></ProtectedRoute>} />
+            <Route path="/impostos" element={<ProtectedRoute><Endividamento /></ProtectedRoute>} />
             <Route path="/precificacao" element={<ProtectedRoute><Precificacao /></ProtectedRoute>} />
             <Route path="/custo-fixo" element={<ProtectedRoute><CustoFixo /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
