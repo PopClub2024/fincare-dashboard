@@ -26,6 +26,7 @@ interface Props {
 
 interface VendaRow {
   id: string;
+  feegow_id: string | null;
   data_competencia: string;
   procedimento: string | null;
   especialidade: string | null;
@@ -62,10 +63,11 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
     setLoading(true);
     supabase
       .from("transacoes_vendas")
-      .select("id, data_competencia, procedimento, especialidade, valor_bruto, forma_pagamento, status_recebimento, data_prevista_recebimento, status_presenca, convenio_id, quantidade, observacao, medicos(nome), pacientes(nome), convenios(nome, prazo_repasse_dias)")
+      .select("id, feegow_id, data_competencia, procedimento, especialidade, valor_bruto, forma_pagamento, status_recebimento, data_prevista_recebimento, status_presenca, convenio_id, quantidade, observacao, medicos(nome), pacientes(nome), convenios(nome, prazo_repasse_dias)")
       .eq("clinica_id", clinicaId)
       .gte("data_competencia", format(dateFrom, "yyyy-MM-dd"))
       .lte("data_competencia", format(dateTo, "yyyy-MM-dd"))
+      .not("feegow_id", "like", "inv_%")
       .order("data_competencia", { ascending: false })
       .limit(1000)
       .then(({ data, error }) => {

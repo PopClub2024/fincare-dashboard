@@ -244,15 +244,30 @@ async function syncPeriod(
     stats.detalhes.appoints_count = appoints.length;
     stats.detalhes.sales_count = sales.length;
 
-    // Build sales queue by date for matching
-    const salesByDate = new Map<string, { invoice_id: number; amount: number; matched: boolean }[]>();
+    // Build sales queue by date for matching - capture full metadata
+    interface SaleEntry {
+      invoice_id: number; amount: number; matched: boolean;
+      professional_id?: string; patient_id?: string; insurance_id?: string;
+      procedure_name?: string; description?: string; payment_type?: number;
+    }
+    const salesByDate = new Map<string, SaleEntry[]>();
     for (const s of sales) {
-      const amt = Number(s.amount || 0) || 0;
+      const amt = Number(s.amount || s.valor || 0) || 0;
       if (amt <= 0) continue;
-      const saleDate = (s.timestamp || "").split(" ")[0];
+      const saleDate = (s.timestamp || s.data || "").split(" ")[0];
       if (!saleDate) continue;
       const arr = salesByDate.get(saleDate) || [];
-      arr.push({ invoice_id: Number(s.invoice_id), amount: amt, matched: false });
+      arr.push({
+        invoice_id: Number(s.invoice_id || s.id),
+        amount: amt,
+        matched: false,
+        professional_id: String(s.profissional_id || s.professional_id || s.doctor_id || ""),
+        patient_id: String(s.paciente_id || s.patient_id || ""),
+        insurance_id: String(s.convenio_id || s.insurance_id || ""),
+        procedure_name: s.procedimento_nome || s.procedure_name || s.descricao || null,
+        description: s.descricao || s.description || null,
+        payment_type: Number(s.forma_pagamento_id || s.payment_type_id || 0),
+      });
       salesByDate.set(saleDate, arr);
     }
 
@@ -412,7 +427,7 @@ async function syncPeriod(
       });
     }
 
-    // Remaining unmatched sales as standalone
+    // Remaining unmatched sales as standalone — enrich with metadata from sale
     for (const [saleDate, dateSales] of salesByDate.entries()) {
       for (const sale of dateSales) {
         if (sale.matched) continue;
@@ -420,12 +435,37 @@ async function syncPeriod(
         if (seenFeegow.has(fgId)) continue;
         seenFeegow.add(fgId);
         stats.processados++;
+
+        // Resolve metadata from sale fields
+        let medicoId: string | null = null;
+        let especialidade: string | null = null;
+        if (sale.professional_id && lookups.medicos.has(sale.professional_id)) {
+          const med = lookups.medicos.get(sale.professional_id)!;
+          medicoId = med.id;
+          especialidade = med.especialidade;
+        }
+        let convenioId: string | null = null;
+        if (sale.insurance_id && lookups.convenios.has(sale.insurance_id)) {
+          convenioId = lookups.convenios.get(sale.insurance_id)!.id;
+        }
+        let pacienteId: string | null = null;
+        if (sale.patient_id && lookups.pacientes.has(sale.patient_id)) {
+          pacienteId = lookups.pacientes.get(sale.patient_id)!;
+        } else if (sale.patient_id && sale.patient_id !== "" && sale.patient_id !== "undefined") {
+          newPatients.set(sale.patient_id, "Paciente Feegow");
+        }
+
+        const procNome = sale.procedure_name || sale.description || null;
+        const formaPgto = mapFormaPagamento(sale.payment_type || null, sale.description);
+
         vendaBatch.push({
           clinica_id: clinicaId, feegow_id: fgId, invoice_id: String(sale.invoice_id),
           origem: "feegow", data_competencia: saleDate, valor_bruto: sale.amount,
-          desconto: 0, valor_pago: 0, descricao: `Venda #${sale.invoice_id}`,
-          procedimento: null, especialidade: null, medico_id: null, convenio_id: null,
-          paciente_id: null, forma_pagamento_enum: null, status_presenca: "atendido",
+          desconto: 0, valor_pago: 0,
+          descricao: procNome || `Venda #${sale.invoice_id}`,
+          procedimento: procNome, especialidade, medico_id: medicoId,
+          convenio_id: convenioId, paciente_id: pacienteId,
+          forma_pagamento_enum: formaPgto, status_presenca: "atendido",
           status_recebimento: "a_receber", quantidade: 1, parcelas: 1,
         });
       }
