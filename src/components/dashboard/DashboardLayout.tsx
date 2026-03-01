@@ -14,7 +14,7 @@ const navItems = [
   { label: "Contas a Receber", icon: ArrowDownCircle, path: "/contas-a-receber" },
   { label: "Contas a Pagar", icon: ArrowUpCircle, path: "/contas-a-pagar" },
   { label: "Endividamento", icon: Landmark, path: "/endividamento" },
-  { label: "Impostos", icon: Calculator, path: "/impostos" },
+  
   { label: "Precificação", icon: Tag, path: "/precificacao" },
   { label: "Custo Fixo", icon: Building2, path: "/custo-fixo" },
   { label: "Configurações", icon: Settings, path: "/configuracoes" },
