@@ -286,9 +286,13 @@ export type Database = {
           created_at: string
           divergencia: number | null
           id: string
+          metodo_match: string | null
           observacao: string | null
           recebimento_id: string | null
+          score: number | null
           status: Database["public"]["Enums"]["status_conciliacao"]
+          tipo: string | null
+          transacao_bancaria_id: string | null
           venda_id: string | null
         }
         Insert: {
@@ -296,9 +300,13 @@ export type Database = {
           created_at?: string
           divergencia?: number | null
           id?: string
+          metodo_match?: string | null
           observacao?: string | null
           recebimento_id?: string | null
+          score?: number | null
           status?: Database["public"]["Enums"]["status_conciliacao"]
+          tipo?: string | null
+          transacao_bancaria_id?: string | null
           venda_id?: string | null
         }
         Update: {
@@ -306,9 +314,13 @@ export type Database = {
           created_at?: string
           divergencia?: number | null
           id?: string
+          metodo_match?: string | null
           observacao?: string | null
           recebimento_id?: string | null
+          score?: number | null
           status?: Database["public"]["Enums"]["status_conciliacao"]
+          tipo?: string | null
+          transacao_bancaria_id?: string | null
           venda_id?: string | null
         }
         Relationships: [
@@ -324,6 +336,13 @@ export type Database = {
             columns: ["recebimento_id"]
             isOneToOne: false
             referencedRelation: "transacoes_recebimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conciliacoes_transacao_bancaria_id_fkey"
+            columns: ["transacao_bancaria_id"]
+            isOneToOne: false
+            referencedRelation: "transacoes_bancarias"
             referencedColumns: ["id"]
           },
           {
@@ -2089,44 +2108,140 @@ export type Database = {
           },
         ]
       }
-      transacoes_recebimentos: {
+      transacoes_bancarias: {
         Row: {
+          banco: string | null
+          categoria_auto: string | null
           clinica_id: string
+          conciliacao_id: string | null
+          conta: string | null
           created_at: string
-          data_recebimento: string
-          getnet_id: string | null
+          data_transacao: string
+          descricao: string | null
+          fitid: string
           id: string
-          observacao: string | null
-          origem: string
-          referencia_externa: string | null
+          status: string
+          tipo: string
           updated_at: string
           valor: number
+        }
+        Insert: {
+          banco?: string | null
+          categoria_auto?: string | null
+          clinica_id: string
+          conciliacao_id?: string | null
+          conta?: string | null
+          created_at?: string
+          data_transacao: string
+          descricao?: string | null
+          fitid: string
+          id?: string
+          status?: string
+          tipo: string
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          banco?: string | null
+          categoria_auto?: string | null
+          clinica_id?: string
+          conciliacao_id?: string | null
+          conta?: string | null
+          created_at?: string
+          data_transacao?: string
+          descricao?: string | null
+          fitid?: string
+          id?: string
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transacoes_bancarias_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transacoes_bancarias_conciliacao_id_fkey"
+            columns: ["conciliacao_id"]
+            isOneToOne: false
+            referencedRelation: "conciliacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transacoes_recebimentos: {
+        Row: {
+          autorizacao: string | null
+          bandeira: string | null
+          clinica_id: string
+          created_at: string
+          data_liquidacao: string | null
+          data_recebimento: string
+          forma_pagamento: string | null
+          getnet_id: string | null
+          id: string
+          nsu: string | null
+          observacao: string | null
+          origem: string
+          parcelas: number | null
+          referencia_externa: string | null
+          taxa: number | null
+          tid: string | null
+          transacao_bancaria_id: string | null
+          updated_at: string
+          valor: number
+          valor_liquido: number | null
           venda_id: string | null
         }
         Insert: {
+          autorizacao?: string | null
+          bandeira?: string | null
           clinica_id: string
           created_at?: string
+          data_liquidacao?: string | null
           data_recebimento: string
+          forma_pagamento?: string | null
           getnet_id?: string | null
           id?: string
+          nsu?: string | null
           observacao?: string | null
           origem?: string
+          parcelas?: number | null
           referencia_externa?: string | null
+          taxa?: number | null
+          tid?: string | null
+          transacao_bancaria_id?: string | null
           updated_at?: string
           valor: number
+          valor_liquido?: number | null
           venda_id?: string | null
         }
         Update: {
+          autorizacao?: string | null
+          bandeira?: string | null
           clinica_id?: string
           created_at?: string
+          data_liquidacao?: string | null
           data_recebimento?: string
+          forma_pagamento?: string | null
           getnet_id?: string | null
           id?: string
+          nsu?: string | null
           observacao?: string | null
           origem?: string
+          parcelas?: number | null
           referencia_externa?: string | null
+          taxa?: number | null
+          tid?: string | null
+          transacao_bancaria_id?: string | null
           updated_at?: string
           valor?: number
+          valor_liquido?: number | null
           venda_id?: string | null
         }
         Relationships: [
@@ -2135,6 +2250,13 @@ export type Database = {
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transacoes_recebimentos_transacao_bancaria_id_fkey"
+            columns: ["transacao_bancaria_id"]
+            isOneToOne: false
+            referencedRelation: "transacoes_bancarias"
             referencedColumns: ["id"]
           },
           {
