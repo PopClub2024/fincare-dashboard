@@ -32,7 +32,7 @@ export default function DashboardCFO() {
             <TabsTrigger value="growth">Growth</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dre"><TabDRE /></TabsContent>
+          <TabsContent value="dre"><TabDRE dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
           <TabsContent value="caixa"><TabCaixa /></TabsContent>
           <TabsContent value="capital"><TabCapitalGiro /></TabsContent>
           <TabsContent value="operacional"><TabOperacional /></TabsContent>

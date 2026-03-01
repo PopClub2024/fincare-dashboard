@@ -1,62 +1,380 @@
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Tooltip, TooltipContent, TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend, Tooltip as RTooltip, Line, ComposedChart,
+} from "recharts";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import {
+  DollarSign, TrendingUp, TrendingDown, BarChart3, Info, ChevronDown, ChevronRight, FileSpreadsheet,
+} from "lucide-react";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 
-const mockData = [
-  { mes: "Jan", rl: 0, csv: 0, cv: 0, cf: 0, ebitda: 0 },
-  { mes: "Fev", rl: 0, csv: 0, cv: 0, cf: 0, ebitda: 0 },
-  { mes: "Mar", rl: 0, csv: 0, cv: 0, cf: 0, ebitda: 0 },
-];
+const fmt = (v: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-export default function TabDRE() {
+const fmtPct = (v: number) => `${v.toFixed(1)}%`;
+
+interface DreMonth {
+  mes: string;
+  mes_label: string;
+  rt: number;
+  impostos: number;
+  taxa_cartao: number;
+  repasses: number;
+  mc: number;
+  mc_pct: number;
+  cf: number;
+  resultado: number;
+  resultado_pct: number;
+  receita_cartao: number;
+  imposto_info: any;
+  taxa_info: any;
+}
+
+interface DreCards {
+  rt: number;
+  impostos: number;
+  taxa_cartao: number;
+  repasses: number;
+  mc: number;
+  mc_pct: number;
+  cf: number;
+  resultado: number;
+  resultado_pct: number;
+}
+
+interface DreData {
+  cards: DreCards;
+  mensal: DreMonth[];
+}
+
+interface Props {
+  dateFrom: Date;
+  dateTo: Date;
+  filtros?: Record<string, string>;
+}
+
+export default function TabDRE({ dateFrom, dateTo, filtros = {} }: Props) {
+  const { clinicaId } = useAuth();
+  const [data, setData] = useState<DreData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [showCompare, setShowCompare] = useState(false);
+  const [compareValues, setCompareValues] = useState<Record<string, string>>({});
+  const [compareMonth, setCompareMonth] = useState("");
+
+  useEffect(() => {
+    if (!clinicaId) return;
+    fetchDre();
+  }, [clinicaId, dateFrom, dateTo, filtros]);
+
+  const fetchDre = async () => {
+    setLoading(true);
+    try {
+      const { data: result, error } = await supabase.rpc("get_dre", {
+        _start_date: format(dateFrom, "yyyy-MM-dd"),
+        _end_date: format(dateTo, "yyyy-MM-dd"),
+        _filtros: filtros,
+      });
+      if (error) throw error;
+      setData(result as unknown as DreData);
+    } catch (e: any) {
+      toast.error("Erro ao carregar DRE: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleRow = (key: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const chartData = useMemo(() => {
+    if (!data?.mensal) return [];
+    return data.mensal.map((m) => ({
+      name: m.mes_label,
+      RT: m.rt,
+      MC: m.mc,
+      Resultado: m.resultado,
+    }));
+  }, [data]);
+
+  const compareDeltas = useMemo(() => {
+    if (!compareMonth || !data?.mensal) return null;
+    const month = data.mensal.find((m) => m.mes === compareMonth);
+    if (!month) return null;
+
+    const lines = [
+      { key: "rt", label: "Receita Bruta", sistema: month.rt },
+      { key: "impostos", label: "Impostos", sistema: month.impostos },
+      { key: "taxa_cartao", label: "Taxa Cartão", sistema: month.taxa_cartao },
+      { key: "repasses", label: "Repasses Médicos", sistema: month.repasses },
+      { key: "cf", label: "Custo Fixo", sistema: month.cf },
+    ];
+    return lines.map((l) => {
+      const planilha = parseFloat(compareValues[l.key] || "0");
+      const delta = l.sistema - planilha;
+      const deltaPct = planilha !== 0 ? (delta / planilha) * 100 : 0;
+      return { ...l, planilha, delta, deltaPct };
+    });
+  }, [compareMonth, compareValues, data]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!data) return <p className="text-sm text-muted-foreground p-4">Sem dados disponíveis.</p>;
+
+  const { cards, mensal } = data;
+
   return (
     <div className="space-y-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+        <KpiMini label="Receita Bruta" value={fmt(cards.rt)} icon={<DollarSign className="h-4 w-4" />} formula="RT = Σ transacoes_vendas.valor_bruto no período" />
+        <KpiMini label="Impostos LP" value={fmt(cards.impostos)} icon={<TrendingDown className="h-4 w-4" />} negative formula="Impostos = RT × alíquota LP vigente no mês" />
+        <KpiMini label="Taxa Cartão" value={fmt(cards.taxa_cartao)} icon={<TrendingDown className="h-4 w-4" />} negative formula="Taxa = Receita_cartão × alíquota vigente" />
+        <KpiMini label="Margem Contribuição" value={fmt(cards.mc)} subtitle={fmtPct(cards.mc_pct)} icon={<BarChart3 className="h-4 w-4" />} formula="MC = RT - Impostos - Taxa - Repasses | MC% = MC/RT×100" positive={cards.mc > 0} />
+        <KpiMini label="Custo Fixo" value={fmt(cards.cf)} icon={<TrendingDown className="h-4 w-4" />} negative formula="CF = Σ lançamentos mapeados como custo_fixo" />
+        <KpiMini label="Resultado" value={fmt(cards.resultado)} subtitle={fmtPct(cards.resultado_pct)} icon={cards.resultado >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />} positive={cards.resultado > 0} formula="Resultado = MC - CF | %Resultado = Resultado/RT×100" />
+      </div>
+
+      {/* Chart */}
       <Card className="border-0 shadow-md">
-        <CardHeader>
-          <CardTitle className="text-lg">DRE Mensal</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-lg">DRE Mensal — Evolução</CardTitle>
+          <Dialog open={showCompare} onOpenChange={setShowCompare}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <FileSpreadsheet className="h-4 w-4" />
+                Comparar com Planilha
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader><DialogTitle>Comparar com Planilha</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label>Mês</Label>
+                  <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={compareMonth} onChange={(e) => setCompareMonth(e.target.value)}>
+                    <option value="">Selecione...</option>
+                    {mensal.map((m) => <option key={m.mes} value={m.mes}>{m.mes_label}</option>)}
+                  </select>
+                </div>
+                {["rt", "impostos", "taxa_cartao", "repasses", "cf"].map((key) => (
+                  <div key={key} className="space-y-1">
+                    <Label className="capitalize">{key === "rt" ? "Receita Bruta" : key === "taxa_cartao" ? "Taxa Cartão" : key === "cf" ? "Custo Fixo" : key === "impostos" ? "Impostos" : "Repasses Médicos"}</Label>
+                    <Input type="number" placeholder="Valor da planilha" value={compareValues[key] || ""} onChange={(e) => setCompareValues({ ...compareValues, [key]: e.target.value })} />
+                  </div>
+                ))}
+                {compareDeltas && (
+                  <div className="mt-4 rounded-lg border p-3">
+                    <p className="text-sm font-semibold mb-2">Resultado da Comparação</p>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Linha</TableHead>
+                          <TableHead className="text-right">Sistema</TableHead>
+                          <TableHead className="text-right">Planilha</TableHead>
+                          <TableHead className="text-right">Delta</TableHead>
+                          <TableHead className="text-right">%</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {compareDeltas.map((d) => (
+                          <TableRow key={d.key}>
+                            <TableCell className="text-sm">{d.label}</TableCell>
+                            <TableCell className="text-right text-sm">{fmt(d.sistema)}</TableCell>
+                            <TableCell className="text-right text-sm">{fmt(d.planilha)}</TableCell>
+                            <TableCell className={`text-right text-sm font-medium ${Math.abs(d.deltaPct) > 0.5 ? "text-destructive" : "text-emerald-600"}`}>{fmt(d.delta)}</TableCell>
+                            <TableCell className={`text-right text-sm ${Math.abs(d.deltaPct) > 0.5 ? "text-destructive" : "text-emerald-600"}`}>{fmtPct(d.deltaPct)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <p className="text-xs text-muted-foreground mt-2">✅ Aceito se delta ≤ 0,5% ou ≤ R$ 1,00</p>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </CardHeader>
         <CardContent>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mockData}>
+              <ComposedChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="mes" className="text-xs" />
-                <YAxis className="text-xs" />
-                <Tooltip />
+                <XAxis dataKey="name" className="text-xs" />
+                <YAxis className="text-xs" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <RTooltip formatter={(value: number) => fmt(value)} />
                 <Legend />
-                <Bar dataKey="rl" name="Receita Líquida" fill="hsl(204, 67%, 32%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="ebitda" name="EBITDA" fill="hsl(358, 74%, 44%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Bar dataKey="RT" name="Receita Bruta" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} opacity={0.3} />
+                <Bar dataKey="MC" name="Margem Contrib." fill="hsl(var(--secondary))" radius={[4, 4, 0, 0]} />
+                <Line dataKey="Resultado" name="Resultado" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 4 }} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </CardContent>
       </Card>
 
+      {/* DRE Table */}
       <Card className="border-0 shadow-md">
-        <CardHeader>
-          <CardTitle className="text-lg">Demonstrativo Detalhado</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 text-sm">
-            {[
-              { label: "Receita Bruta", value: "R$ 0,00", bold: true },
-              { label: "(-) Descontos e Impostos", value: "R$ 0,00" },
-              { label: "= Receita Líquida", value: "R$ 0,00", bold: true },
-              { label: "(-) Custo dos Serviços", value: "R$ 0,00" },
-              { label: "= Margem de Contribuição", value: "R$ 0,00", bold: true },
-              { label: "(-) Custos Variáveis", value: "R$ 0,00" },
-              { label: "(-) Custos Fixos", value: "R$ 0,00" },
-              { label: "= EBITDA", value: "R$ 0,00", bold: true },
-              { label: "(+) Depreciação/Amortização", value: "R$ 0,00" },
-              { label: "= Resultado Operacional", value: "R$ 0,00", bold: true },
-            ].map((row) => (
-              <div key={row.label} className={`flex justify-between rounded px-3 py-2 ${row.bold ? "bg-accent font-semibold" : ""}`}>
-                <span>{row.label}</span>
-                <span>{row.value}</span>
-              </div>
-            ))}
-          </div>
+        <CardHeader><CardTitle className="text-lg">Demonstrativo de Resultado (DRE)</CardTitle></CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="sticky left-0 bg-card z-10 min-w-[220px]">Indicador</TableHead>
+                {mensal.map((m) => <TableHead key={m.mes} className="text-right min-w-[120px]">{m.mes_label}</TableHead>)}
+                <TableHead className="text-right min-w-[130px] font-bold">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* RT */}
+              <DreTableRow label="Receita Bruta (RT)" values={mensal.map((m) => m.rt)} total={cards.rt} bold />
+
+              {/* Impostos - expandível */}
+              <DreTableRow label="(-) Impostos LP" values={mensal.map((m) => m.impostos)} total={cards.impostos} negative expandable expanded={expandedRows.has("impostos")} onToggle={() => toggleRow("impostos")} />
+              {expandedRows.has("impostos") && mensal.some((m) => m.imposto_info?.percentual) && (
+                <TableRow className="bg-muted/30">
+                  <TableCell className="sticky left-0 bg-muted/30 z-10 pl-8 text-xs text-muted-foreground">
+                    {mensal[0]?.imposto_info?.nome || "LP"} ({mensal[0]?.imposto_info?.percentual}% desde {mensal[0]?.imposto_info?.vigente_de})
+                  </TableCell>
+                  {mensal.map((m) => (
+                    <TableCell key={m.mes} className="text-right text-xs text-muted-foreground">
+                      {m.imposto_info?.percentual ? `${m.imposto_info.percentual}%` : m.imposto_info?.alerta ? "⚠️" : "—"}
+                    </TableCell>
+                  ))}
+                  <TableCell />
+                </TableRow>
+              )}
+
+              {/* Taxa Cartão - expandível */}
+              <DreTableRow label="(-) Taxa Cartão" values={mensal.map((m) => m.taxa_cartao)} total={cards.taxa_cartao} negative expandable expanded={expandedRows.has("taxa")} onToggle={() => toggleRow("taxa")} />
+              {expandedRows.has("taxa") && (
+                <TableRow className="bg-muted/30">
+                  <TableCell className="sticky left-0 bg-muted/30 z-10 pl-8 text-xs text-muted-foreground">
+                    {mensal[0]?.taxa_info?.nome || "Taxa"} ({mensal[0]?.taxa_info?.percentual}% s/ receita cartão)
+                  </TableCell>
+                  {mensal.map((m) => (
+                    <TableCell key={m.mes} className="text-right text-xs text-muted-foreground">
+                      {m.taxa_info?.percentual ? `${m.taxa_info.percentual}% s/ ${fmt(m.receita_cartao)}` : "—"}
+                    </TableCell>
+                  ))}
+                  <TableCell />
+                </TableRow>
+              )}
+
+              {/* Repasses */}
+              <DreTableRow label="(-) Repasses Médicos (CV)" values={mensal.map((m) => m.repasses)} total={cards.repasses} negative />
+
+              {/* MC */}
+              <DreTableRow label="= Margem de Contribuição" values={mensal.map((m) => m.mc)} total={cards.mc} bold highlight />
+              <DreTableRow label="% MC sobre RT" values={mensal.map((m) => m.mc_pct)} total={cards.mc_pct} percentage />
+
+              {/* CF */}
+              <DreTableRow label="(-) Custo Fixo Total" values={mensal.map((m) => m.cf)} total={cards.cf} negative />
+
+              {/* Resultado */}
+              <DreTableRow label="= Resultado Líquido" values={mensal.map((m) => m.resultado)} total={cards.resultado} bold highlight />
+              <DreTableRow label="% Resultado sobre RT" values={mensal.map((m) => m.resultado_pct)} total={cards.resultado_pct} percentage />
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ===================== Sub-components =====================
+
+function KpiMini({ label, value, subtitle, icon, formula, positive, negative }: {
+  label: string; value: string; subtitle?: string; icon: React.ReactNode; formula?: string; positive?: boolean; negative?: boolean;
+}) {
+  const colorClass = positive ? "text-emerald-600" : negative ? "text-destructive" : "text-foreground";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Card className="border-0 shadow-md">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground truncate">{label}</p>
+              <div className="rounded-md bg-accent p-1.5">{icon}</div>
+            </div>
+            <p className={`text-lg font-bold ${colorClass}`}>{value}</p>
+            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+          </CardContent>
+        </Card>
+      </TooltipTrigger>
+      {formula && (
+        <TooltipContent className="max-w-xs">
+          <div className="flex items-start gap-1.5">
+            <Info className="h-3 w-3 mt-0.5 shrink-0" />
+            <p className="text-xs">{formula}</p>
+          </div>
+        </TooltipContent>
+      )}
+    </Tooltip>
+  );
+}
+
+function DreTableRow({ label, values, total, bold, negative, highlight, percentage, expandable, expanded, onToggle }: {
+  label: string; values: number[]; total: number; bold?: boolean; negative?: boolean; highlight?: boolean; percentage?: boolean; expandable?: boolean; expanded?: boolean; onToggle?: () => void;
+}) {
+  const rowClass = highlight ? "bg-accent/50 font-semibold" : bold ? "font-semibold" : "";
+  const formatValue = (v: number) => {
+    if (percentage) return fmtPct(v);
+    return fmt(negative ? -Math.abs(v) : v);
+  };
+  const valueColor = (v: number) => {
+    if (percentage) return "";
+    if (v < 0 || negative) return "text-destructive";
+    return "";
+  };
+
+  return (
+    <TableRow className={rowClass}>
+      <TableCell className={`sticky left-0 bg-card z-10 ${highlight ? "bg-accent/50" : ""}`}>
+        <div className="flex items-center gap-1">
+          {expandable && (
+            <button onClick={onToggle} className="p-0.5 hover:bg-muted rounded">
+              {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            </button>
+          )}
+          <span className="text-sm">{label}</span>
+        </div>
+      </TableCell>
+      {values.map((v, i) => (
+        <TableCell key={i} className={`text-right text-sm ${valueColor(v)}`}>
+          {v === 0 && !percentage ? "—" : formatValue(v)}
+        </TableCell>
+      ))}
+      <TableCell className={`text-right text-sm font-bold ${valueColor(total)}`}>
+        {formatValue(total)}
+      </TableCell>
+    </TableRow>
   );
 }

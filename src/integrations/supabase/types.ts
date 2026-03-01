@@ -566,6 +566,48 @@ export type Database = {
           },
         ]
       }
+      dre_mapeamento_contas: {
+        Row: {
+          ativo: boolean
+          clinica_id: string
+          created_at: string
+          id: string
+          linha_dre: string
+          plano_contas_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          clinica_id: string
+          created_at?: string
+          id?: string
+          linha_dre: string
+          plano_contas_id: string
+        }
+        Update: {
+          ativo?: boolean
+          clinica_id?: string
+          created_at?: string
+          id?: string
+          linha_dre?: string
+          plano_contas_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_mapeamento_contas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dre_mapeamento_contas_plano_contas_id_fkey"
+            columns: ["plano_contas_id"]
+            isOneToOne: false
+            referencedRelation: "plano_contas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integracoes: {
         Row: {
           clinica_id: string
@@ -909,6 +951,56 @@ export type Database = {
           },
         ]
       }
+      taxas_config: {
+        Row: {
+          ativo: boolean
+          base_calculo: string
+          clinica_id: string
+          codigo: string
+          created_at: string
+          id: string
+          nome: string
+          percentual: number
+          tipo: string
+          vigente_ate: string | null
+          vigente_de: string
+        }
+        Insert: {
+          ativo?: boolean
+          base_calculo: string
+          clinica_id: string
+          codigo: string
+          created_at?: string
+          id?: string
+          nome: string
+          percentual: number
+          tipo: string
+          vigente_ate?: string | null
+          vigente_de: string
+        }
+        Update: {
+          ativo?: boolean
+          base_calculo?: string
+          clinica_id?: string
+          codigo?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          percentual?: number
+          tipo?: string
+          vigente_ate?: string | null
+          vigente_de?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "taxas_config_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transacoes_recebimentos: {
         Row: {
           clinica_id: string
@@ -1185,6 +1277,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_dre: {
+        Args: { _end_date: string; _filtros?: Json; _start_date: string }
+        Returns: Json
+      }
       get_user_clinica_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -1203,6 +1299,18 @@ export type Database = {
         Returns: string
       }
       seed_plano_contas: { Args: { _clinica_id: string }; Returns: undefined }
+      upsert_taxa_vigencia: {
+        Args: {
+          _base_calculo: string
+          _clinica_id: string
+          _codigo: string
+          _nome: string
+          _percentual: number
+          _tipo: string
+          _vigente_de: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "gestor" | "operador_caixa" | "visualizador"

@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import {
   RefreshCw, Upload, CheckCircle2, XCircle, Clock, Wifi, Plus, Pencil, Trash2, Search, Info, BarChart3,
 } from "lucide-react";
+import TabImpostosTaxas from "@/components/dashboard/TabImpostosTaxas";
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -76,14 +77,16 @@ export default function Configuracoes() {
         </div>
 
         <Tabs defaultValue="integracoes" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 bg-muted">
+          <TabsList className="grid w-full grid-cols-4 bg-muted">
             <TabsTrigger value="integracoes">Integrações</TabsTrigger>
             <TabsTrigger value="plano">Plano de Contas</TabsTrigger>
+            <TabsTrigger value="impostos">Impostos e Taxas</TabsTrigger>
             <TabsTrigger value="indicadores">Indicadores</TabsTrigger>
           </TabsList>
 
           <TabsContent value="integracoes"><TabIntegracoes /></TabsContent>
           <TabsContent value="plano"><TabPlanoContasConfig /></TabsContent>
+          <TabsContent value="impostos"><TabImpostosTaxas /></TabsContent>
           <TabsContent value="indicadores"><TabIndicadores /></TabsContent>
         </Tabs>
       </div>
