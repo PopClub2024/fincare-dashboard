@@ -80,7 +80,7 @@ async function acquireLock(supabase: any, clinicaId: string, action: string, dat
 }
 
 // ─── FK Lookups ────────────────────────────────────────────────
-async function buildLookupMaps(supabase: any, clinicaId: string) {
+async function buildLookupMaps(supabase: any, clinicaId: string, headers: Record<string, string>) {
   const [medicosRes, conveniosRes, pacientesRes] = await Promise.all([
     supabase.from("medicos").select("id, feegow_id, especialidade").eq("clinica_id", clinicaId),
     supabase.from("convenios").select("id, feegow_id, nome").eq("clinica_id", clinicaId),
@@ -92,7 +92,24 @@ async function buildLookupMaps(supabase: any, clinicaId: string) {
   for (const c of (conveniosRes.data || [])) if (c.feegow_id) convenios.set(c.feegow_id, { id: c.id, nome: c.nome });
   const pacientes = new Map<string, string>();
   for (const p of (pacientesRes.data || [])) if (p.feegow_id) pacientes.set(p.feegow_id, p.id);
-  return { medicos, convenios, pacientes };
+
+  // Fetch procedure names from Feegow API
+  const procedimentos = new Map<string, string>();
+  try {
+    const data = await feegowFetch(`${FEEGOW_BASE}/procedures/list`, headers);
+    const procs = data.content || [];
+    const procList = Array.isArray(procs) ? procs : Object.values(procs).flat();
+    for (const p of procList) {
+      const pid = String(p.procedimento_id || p.procedure_id || p.id || "");
+      const nome = p.nome || p.name || p.procedimento_nome || "";
+      if (pid && nome) procedimentos.set(pid, nome);
+    }
+    console.log(`Loaded ${procedimentos.size} procedure names from Feegow`);
+  } catch (e: any) {
+    console.error("Failed to load procedures:", e.message);
+  }
+
+  return { medicos, convenios, pacientes, procedimentos };
 }
 
 // ─── Payment form mapping ──────────────────────────────────────
@@ -139,10 +156,20 @@ async function syncMetadata(supabase: any, clinicaId: string, headers: Record<st
   try {
     const data = await feegowFetch(`${FEEGOW_BASE}/insurance/list`, headers);
     const insurances = data.content || [];
-    for (const ins of (Array.isArray(insurances) ? insurances : [])) {
+    // Debug: log raw insurance structure
+    if (Array.isArray(insurances) && insurances.length > 0) {
+      console.log("INSURANCE SAMPLE:", JSON.stringify(insurances[0]));
+    } else if (insurances && typeof insurances === "object") {
+      const firstKey = Object.keys(insurances)[0];
+      if (firstKey) console.log("INSURANCE SAMPLE (obj):", JSON.stringify({ key: firstKey, val: insurances[firstKey] }));
+    }
+    const insList = Array.isArray(insurances) ? insurances : Object.values(insurances).flat();
+    for (const ins of insList) {
+      const fid = String(ins.convenio_id || ins.insurance_id || ins.id || "");
+      if (!fid || fid === "undefined" || fid === "null") continue;
       const { error } = await supabase.from("convenios").upsert({
-        clinica_id: clinicaId, feegow_id: String(ins.insurance_id || ins.id),
-        nome: ins.name || ins.nome || "Sem nome", ativo: ins.active !== false,
+        clinica_id: clinicaId, feegow_id: fid,
+        nome: ins.nome_fantasia || ins.name || ins.nome || "Sem nome", ativo: ins.active !== false,
       }, { onConflict: "clinica_id,feegow_id" });
       if (!error) result.convenios++; else result.errors.push(`Convênio ${ins.name}: ${error.message}`);
     }
@@ -207,7 +234,7 @@ async function syncPeriod(
   const logId = await createLog(supabase, clinicaId, "feegow_sales", "sync_period", "appoints+sales", makeRequestHash(clinicaId, "sync", dateStart, dateEnd));
 
   try {
-    const lookups = await buildLookupMaps(supabase, clinicaId);
+    const lookups = await buildLookupMaps(supabase, clinicaId, headers);
 
     const [appoints, sales] = await Promise.all([
       fetchAllAppoints(headers, dateStart, dateEnd),
@@ -233,6 +260,18 @@ async function syncPeriod(
     const vendaBatch: any[] = [];
     const itemBatch: any[] = [];
     const seenFeegow = new Set<string>();
+
+    // Debug: log first appt and sale structure
+    if (appoints.length > 0) {
+      const sample = appoints[0];
+      console.log("APPT SAMPLE valor fields:", JSON.stringify({
+        valor: sample.valor, valor_total_agendamento: sample.valor_total_agendamento,
+        procedimento_id: sample.procedimento_id,
+      }));
+    }
+    if (sales.length > 0) {
+      console.log("SALE SAMPLE:", JSON.stringify(sales[0]));
+    }
 
     for (const appt of appoints) {
       const feegowId = String(appt.agendamento_id || appt.id || "");
@@ -271,8 +310,8 @@ async function syncPeriod(
         newPatients.set(patFid, "Paciente Feegow");
       }
 
-      // Convenio
-      const convFid = String(appt.convenio_id || "");
+      // Convenio - try multiple field names
+      const convFid = String(appt.convenio_id || appt.insurance_id || appt.convenio?.id || "");
       let convenioId: string | null = null;
       let convenioNome: string | null = null;
       if (convFid && lookups.convenios.has(convFid)) {
@@ -281,9 +320,22 @@ async function syncPeriod(
         convenioNome = conv.nome;
       }
 
-      // Procedure
-      const procs = appt.procedimentos || appt.procedures || [];
-      const procNome = procs[0]?.nome || procs[0]?.name || null;
+      // Procedure - resolve name from lookup or inline data
+      const procs = appt.procedimentos || appt.procedures || appt.lista_procedimentos || [];
+      let procNome: string | null = null;
+      if (Array.isArray(procs) && procs.length > 0) {
+        const p = procs[0];
+        procNome = p.nome || p.name || p.procedimento_nome || null;
+        if (!procNome) {
+          const pid = String(p.procedimentoID || p.procedimento_id || p.procedure_id || "");
+          if (pid && lookups.procedimentos.has(pid)) procNome = lookups.procedimentos.get(pid)!;
+        }
+      }
+      // Fallback: use top-level procedimento_id
+      if (!procNome && appt.procedimento_id) {
+        const pid = String(appt.procedimento_id);
+        if (lookups.procedimentos.has(pid)) procNome = lookups.procedimentos.get(pid)!;
+      }
 
       // Status
       const statusMap: Record<number, string> = {
@@ -293,10 +345,22 @@ async function syncPeriod(
       const statusPresenca = statusMap[Number(appt.status_id || 0)] || "agendado";
       const isCancelled = ["cancelado", "cancelado_paciente", "faltou"].includes(statusPresenca);
 
-      // Financial: match a sale from same date
-      let valorBruto = 0;
+      // Skip cancelled appointments entirely
+      if (isCancelled) {
+        stats.ignorados++;
+        continue;
+      }
+
+      // Financial: parse BR currency format "R$ 150,00" → 150.00
+      const parseBRCurrency = (v: any): number => {
+        if (v == null) return 0;
+        if (typeof v === "number") return v;
+        const s = String(v).replace(/[R$\s.]/g, "").replace(",", ".");
+        return Number(s) || 0;
+      };
+      let valorBruto = parseBRCurrency(appt.valor_total_agendamento) || parseBRCurrency(appt.valor);
       let invoiceId: string | null = null;
-      if (!isCancelled) {
+      if (valorBruto <= 0) {
         const dateSales = salesByDate.get(dataComp) || [];
         const unmatchedSale = dateSales.find(s => !s.matched);
         if (unmatchedSale) {
@@ -306,7 +370,7 @@ async function syncPeriod(
         }
       }
 
-      const statusRecebimento = isCancelled ? "cancelado" : "a_receber";
+      const statusRecebimento = "a_receber";
 
       itemBatch.push({
         clinica_id: clinicaId,
