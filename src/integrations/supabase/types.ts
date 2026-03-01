@@ -119,6 +119,62 @@ export type Database = {
           },
         ]
       }
+      arquivos_importados: {
+        Row: {
+          arquivo_url: string | null
+          clinica_id: string
+          created_at: string
+          id: string
+          nome_arquivo: string
+          observacao: string | null
+          periodo_fim: string | null
+          periodo_inicio: string | null
+          registros_importados: number | null
+          status: string
+          tamanho_bytes: number | null
+          tipo: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          arquivo_url?: string | null
+          clinica_id: string
+          created_at?: string
+          id?: string
+          nome_arquivo: string
+          observacao?: string | null
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          registros_importados?: number | null
+          status?: string
+          tamanho_bytes?: number | null
+          tipo: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          arquivo_url?: string | null
+          clinica_id?: string
+          created_at?: string
+          id?: string
+          nome_arquivo?: string
+          observacao?: string | null
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          registros_importados?: number | null
+          status?: string
+          tamanho_bytes?: number | null
+          tipo?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "arquivos_importados_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       caixa_historico_mensal: {
         Row: {
           ano: number
@@ -350,6 +406,53 @@ export type Database = {
             columns: ["venda_id"]
             isOneToOne: false
             referencedRelation: "transacoes_vendas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contas_bancarias: {
+        Row: {
+          agencia: string
+          apelido: string | null
+          ativo: boolean
+          banco: string
+          clinica_id: string
+          conta: string
+          created_at: string
+          id: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          agencia: string
+          apelido?: string | null
+          ativo?: boolean
+          banco: string
+          clinica_id: string
+          conta: string
+          created_at?: string
+          id?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Update: {
+          agencia?: string
+          apelido?: string | null
+          ativo?: boolean
+          banco?: string
+          clinica_id?: string
+          conta?: string
+          created_at?: string
+          id?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contas_bancarias_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
             referencedColumns: ["id"]
           },
         ]
@@ -1064,6 +1167,109 @@ export type Database = {
           },
         ]
       }
+      getnet_transacoes: {
+        Row: {
+          arquivo_id: string | null
+          autorizacao: string | null
+          bandeira: string | null
+          clinica_id: string
+          comprovante_venda: string | null
+          created_at: string
+          data_prevista_pagamento: string | null
+          data_venda: string
+          forma_pagamento: string | null
+          id: string
+          id_transacao_pix: string | null
+          instituicao_bancaria: string | null
+          modalidade: string | null
+          numero_cartao: string | null
+          parcelas: number | null
+          status_conciliacao: string
+          status_transacao: string | null
+          terminal: string | null
+          tipo_extrato: string
+          transacao_bancaria_id: string | null
+          valor_bruto: number
+          valor_liquido: number
+          valor_taxa: number
+          venda_id: string | null
+        }
+        Insert: {
+          arquivo_id?: string | null
+          autorizacao?: string | null
+          bandeira?: string | null
+          clinica_id: string
+          comprovante_venda?: string | null
+          created_at?: string
+          data_prevista_pagamento?: string | null
+          data_venda: string
+          forma_pagamento?: string | null
+          id?: string
+          id_transacao_pix?: string | null
+          instituicao_bancaria?: string | null
+          modalidade?: string | null
+          numero_cartao?: string | null
+          parcelas?: number | null
+          status_conciliacao?: string
+          status_transacao?: string | null
+          terminal?: string | null
+          tipo_extrato: string
+          transacao_bancaria_id?: string | null
+          valor_bruto: number
+          valor_liquido: number
+          valor_taxa?: number
+          venda_id?: string | null
+        }
+        Update: {
+          arquivo_id?: string | null
+          autorizacao?: string | null
+          bandeira?: string | null
+          clinica_id?: string
+          comprovante_venda?: string | null
+          created_at?: string
+          data_prevista_pagamento?: string | null
+          data_venda?: string
+          forma_pagamento?: string | null
+          id?: string
+          id_transacao_pix?: string | null
+          instituicao_bancaria?: string | null
+          modalidade?: string | null
+          numero_cartao?: string | null
+          parcelas?: number | null
+          status_conciliacao?: string
+          status_transacao?: string | null
+          terminal?: string | null
+          tipo_extrato?: string
+          transacao_bancaria_id?: string | null
+          valor_bruto?: number
+          valor_liquido?: number
+          valor_taxa?: number
+          venda_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "getnet_transacoes_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "getnet_transacoes_transacao_bancaria_id_fkey"
+            columns: ["transacao_bancaria_id"]
+            isOneToOne: false
+            referencedRelation: "transacoes_bancarias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "getnet_transacoes_venda_id_fkey"
+            columns: ["venda_id"]
+            isOneToOne: false
+            referencedRelation: "transacoes_vendas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       imposto_pagamentos: {
         Row: {
           clinica_id: string
@@ -1496,6 +1702,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "parametros_financeiros_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      permissoes_modulo: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          id: string
+          modulo: string
+          pode_editar: boolean
+          pode_visualizar: boolean
+          user_id: string
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          id?: string
+          modulo: string
+          pode_editar?: boolean
+          pode_visualizar?: boolean
+          user_id: string
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          id?: string
+          modulo?: string
+          pode_editar?: boolean
+          pode_visualizar?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "permissoes_modulo_clinica_id_fkey"
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
@@ -2115,6 +2359,7 @@ export type Database = {
           clinica_id: string
           conciliacao_id: string | null
           conta: string | null
+          conta_bancaria_id: string | null
           created_at: string
           data_transacao: string
           descricao: string | null
@@ -2131,6 +2376,7 @@ export type Database = {
           clinica_id: string
           conciliacao_id?: string | null
           conta?: string | null
+          conta_bancaria_id?: string | null
           created_at?: string
           data_transacao: string
           descricao?: string | null
@@ -2147,6 +2393,7 @@ export type Database = {
           clinica_id?: string
           conciliacao_id?: string | null
           conta?: string | null
+          conta_bancaria_id?: string | null
           created_at?: string
           data_transacao?: string
           descricao?: string | null
@@ -2170,6 +2417,13 @@ export type Database = {
             columns: ["conciliacao_id"]
             isOneToOne: false
             referencedRelation: "conciliacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transacoes_bancarias_conta_bancaria_id_fkey"
+            columns: ["conta_bancaria_id"]
+            isOneToOne: false
+            referencedRelation: "contas_bancarias"
             referencedColumns: ["id"]
           },
         ]

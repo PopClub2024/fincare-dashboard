@@ -20,11 +20,13 @@ import {
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   RefreshCw, Upload, CheckCircle2, XCircle, Clock, Wifi, Plus, Pencil, Trash2, Search, Info, BarChart3,
+  Building2, Users, Shield, Mail,
 } from "lucide-react";
 import TabImpostosTaxas from "@/components/dashboard/TabImpostosTaxas";
 
@@ -77,16 +79,20 @@ export default function Configuracoes() {
         </div>
 
         <Tabs defaultValue="integracoes" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4 bg-muted">
+          <TabsList className="grid w-full grid-cols-6 bg-muted">
             <TabsTrigger value="integracoes">Integrações</TabsTrigger>
+            <TabsTrigger value="contas">Contas Bancárias</TabsTrigger>
             <TabsTrigger value="plano">Plano de Contas</TabsTrigger>
             <TabsTrigger value="impostos">Impostos e Taxas</TabsTrigger>
+            <TabsTrigger value="usuarios">Usuários</TabsTrigger>
             <TabsTrigger value="indicadores">Indicadores</TabsTrigger>
           </TabsList>
 
           <TabsContent value="integracoes"><TabIntegracoes /></TabsContent>
+          <TabsContent value="contas"><TabContasBancarias /></TabsContent>
           <TabsContent value="plano"><TabPlanoContasConfig /></TabsContent>
           <TabsContent value="impostos"><TabImpostosTaxas /></TabsContent>
+          <TabsContent value="usuarios"><TabUsuarios /></TabsContent>
           <TabsContent value="indicadores"><TabIndicadores /></TabsContent>
         </Tabs>
       </div>
@@ -660,6 +666,343 @@ function TabIndicadores() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// ======================= TAB: CONTAS BANCÁRIAS =======================
+function TabContasBancarias() {
+  const { clinicaId } = useAuth();
+  const [contas, setContas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showDialog, setShowDialog] = useState(false);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [form, setForm] = useState({ banco: "", agencia: "", conta: "", tipo: "corrente", apelido: "" });
+
+  useEffect(() => { if (clinicaId) fetchContas(); }, [clinicaId]);
+
+  const fetchContas = async () => {
+    setLoading(true);
+    const { data } = await supabase.from("contas_bancarias").select("*").eq("clinica_id", clinicaId!).order("banco");
+    setContas(data || []);
+    setLoading(false);
+  };
+
+  const openNew = () => { setEditing(null); setForm({ banco: "", agencia: "", conta: "", tipo: "corrente", apelido: "" }); setShowDialog(true); };
+  const openEdit = (c: any) => { setEditing(c); setForm({ banco: c.banco, agencia: c.agencia, conta: c.conta, tipo: c.tipo, apelido: c.apelido || "" }); setShowDialog(true); };
+
+  const handleSave = async () => {
+    if (!form.banco || !form.agencia || !form.conta) { toast.error("Preencha banco, agência e conta"); return; }
+    const payload = { clinica_id: clinicaId!, ...form };
+    if (editing) {
+      const { error } = await supabase.from("contas_bancarias").update(payload).eq("id", editing.id);
+      if (error) toast.error(error.message); else { toast.success("Conta atualizada!"); setShowDialog(false); fetchContas(); }
+    } else {
+      const { error } = await supabase.from("contas_bancarias").insert(payload);
+      if (error) toast.error(error.message); else { toast.success("Conta criada!"); setShowDialog(false); fetchContas(); }
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Excluir esta conta bancária?")) return;
+    const { error } = await supabase.from("contas_bancarias").delete().eq("id", id);
+    if (error) toast.error(error.message); else { toast.success("Conta excluída!"); fetchContas(); }
+  };
+
+  const handleToggle = async (c: any) => {
+    await supabase.from("contas_bancarias").update({ ativo: !c.ativo }).eq("id", c.id);
+    fetchContas();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-5 w-5 text-primary" />
+          <h3 className="text-lg font-semibold">Contas Bancárias</h3>
+          <Badge variant="secondary">{contas.length}</Badge>
+        </div>
+        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+          <DialogTrigger asChild>
+            <Button className="gap-2" onClick={openNew}><Plus className="h-4 w-4" />Nova Conta</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>{editing ? "Editar Conta" : "Nova Conta Bancária"}</DialogTitle></DialogHeader>
+            <div className="grid gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1"><Label>Banco *</Label><Input value={form.banco} onChange={(e) => setForm({ ...form, banco: e.target.value })} placeholder="Ex: Santander" /></div>
+                <div className="space-y-1"><Label>Apelido</Label><Input value={form.apelido} onChange={(e) => setForm({ ...form, apelido: e.target.value })} placeholder="Ex: Conta Principal" /></div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1"><Label>Agência *</Label><Input value={form.agencia} onChange={(e) => setForm({ ...form, agencia: e.target.value })} placeholder="0001" /></div>
+                <div className="space-y-1"><Label>Conta *</Label><Input value={form.conta} onChange={(e) => setForm({ ...form, conta: e.target.value })} placeholder="12345-6" /></div>
+                <div className="space-y-1">
+                  <Label>Tipo</Label>
+                  <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="corrente">Corrente</SelectItem>
+                      <SelectItem value="poupanca">Poupança</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button onClick={handleSave}>{editing ? "Salvar" : "Criar Conta"}</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center p-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>
+      ) : contas.length === 0 ? (
+        <Card><CardContent className="p-12 text-center text-muted-foreground">Nenhuma conta bancária cadastrada.</CardContent></Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Banco</TableHead>
+                  <TableHead>Agência</TableHead>
+                  <TableHead>Conta</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Apelido</TableHead>
+                  <TableHead className="w-[70px]">Ativo</TableHead>
+                  <TableHead className="w-[100px]">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {contas.map((c) => (
+                  <TableRow key={c.id} className={!c.ativo ? "opacity-50" : ""}>
+                    <TableCell className="font-medium">{c.banco}</TableCell>
+                    <TableCell className="font-mono text-sm">{c.agencia}</TableCell>
+                    <TableCell className="font-mono text-sm">{c.conta}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs capitalize">{c.tipo}</Badge></TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{c.apelido || "—"}</TableCell>
+                    <TableCell>
+                      <button onClick={() => handleToggle(c)} className="cursor-pointer">
+                        {c.ativo ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}
+                      </button>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)}><Pencil className="h-3 w-3" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(c.id)}><Trash2 className="h-3 w-3" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ======================= TAB: USUÁRIOS + PERMISSÕES =======================
+const MODULOS = [
+  { key: "dashboard", label: "Dashboard CFO" },
+  { key: "dre", label: "DRE" },
+  { key: "caixa", label: "Caixa / Fluxo" },
+  { key: "contas_receber", label: "Contas a Receber" },
+  { key: "contas_pagar", label: "Contas a Pagar" },
+  { key: "conciliacao", label: "Conciliação" },
+  { key: "impostos", label: "Impostos" },
+  { key: "endividamento", label: "Endividamento" },
+  { key: "precificacao", label: "Precificação" },
+  { key: "custo_fixo", label: "Custo Fixo" },
+  { key: "configuracoes", label: "Configurações" },
+];
+
+function TabUsuarios() {
+  const { clinicaId } = useAuth();
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [permissoes, setPermissoes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: "", nome: "", role: "visualizador" });
+
+  useEffect(() => { if (clinicaId) fetchAll(); }, [clinicaId]);
+
+  const fetchAll = async () => {
+    setLoading(true);
+    const [usersRes, permsRes] = await Promise.all([
+      supabase.from("usuarios").select("user_id, nome, email, clinica_id").eq("clinica_id", clinicaId!),
+      supabase.from("permissoes_modulo").select("*").eq("clinica_id", clinicaId!),
+    ]);
+
+    const users = usersRes.data || [];
+    // Fetch roles for each user
+    const userIds = users.map((u: any) => u.user_id);
+    const { data: roles } = await supabase.from("user_roles").select("user_id, role").in("user_id", userIds);
+
+    const enriched = users.map((u: any) => ({
+      ...u,
+      role: roles?.find((r: any) => r.user_id === u.user_id)?.role || "visualizador",
+    }));
+
+    setUsuarios(enriched);
+    setPermissoes(permsRes.data || []);
+    setLoading(false);
+  };
+
+  const getUserPerms = (userId: string) => {
+    const userPerms = permissoes.filter((p) => p.user_id === userId);
+    const map: Record<string, { ver: boolean; editar: boolean }> = {};
+    for (const m of MODULOS) {
+      const perm = userPerms.find((p) => p.modulo === m.key);
+      map[m.key] = { ver: perm?.pode_visualizar ?? true, editar: perm?.pode_editar ?? false };
+    }
+    return map;
+  };
+
+  const togglePerm = async (userId: string, modulo: string, field: "pode_visualizar" | "pode_editar", value: boolean) => {
+    const existing = permissoes.find((p) => p.user_id === userId && p.modulo === modulo);
+    if (existing) {
+      await supabase.from("permissoes_modulo").update({ [field]: value }).eq("id", existing.id);
+    } else {
+      await supabase.from("permissoes_modulo").insert({
+        clinica_id: clinicaId!, user_id: userId, modulo,
+        pode_visualizar: field === "pode_visualizar" ? value : true,
+        pode_editar: field === "pode_editar" ? value : false,
+      });
+    }
+    fetchAll();
+  };
+
+  const updateRole = async (userId: string, newRole: string) => {
+    await supabase.from("user_roles").update({ role: newRole as any }).eq("user_id", userId);
+    toast.success("Perfil atualizado!");
+    fetchAll();
+  };
+
+  const removeUser = async (userId: string) => {
+    if (!confirm("Remover este usuário da clínica?")) return;
+    await Promise.all([
+      supabase.from("permissoes_modulo").delete().eq("user_id", userId).eq("clinica_id", clinicaId!),
+      supabase.from("user_roles").delete().eq("user_id", userId),
+      supabase.from("usuarios").delete().eq("user_id", userId).eq("clinica_id", clinicaId!),
+    ]);
+    toast.success("Usuário removido!");
+    setSelectedUser(null);
+    fetchAll();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary" />
+          <h3 className="text-lg font-semibold">Usuários e Permissões</h3>
+          <Badge variant="secondary">{usuarios.length}</Badge>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center p-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* User list */}
+          <Card className="lg:col-span-1">
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Equipe</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {usuarios.map((u) => (
+                <button
+                  key={u.user_id}
+                  onClick={() => setSelectedUser(u.user_id)}
+                  className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                    selectedUser === u.user_id ? "border-primary bg-primary/5" : "hover:bg-muted"
+                  }`}
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-bold">
+                    {(u.nome || u.email || "?")[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{u.nome || "Sem nome"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{u.email || "—"}</p>
+                  </div>
+                  <Badge variant="outline" className="text-xs capitalize shrink-0">{u.role}</Badge>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Permissions panel */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                {selectedUser ? "Permissões por Módulo" : "Selecione um usuário"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {selectedUser ? (() => {
+                const u = usuarios.find((u) => u.user_id === selectedUser);
+                const perms = getUserPerms(selectedUser);
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{u?.nome || u?.email}</p>
+                        <p className="text-xs text-muted-foreground">{u?.email}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Select value={u?.role} onValueChange={(v) => updateRole(selectedUser, v as any)}>
+                          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="gestor">Gestor</SelectItem>
+                            <SelectItem value="operador_caixa">Operador Caixa</SelectItem>
+                            <SelectItem value="visualizador">Visualizador</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button variant="destructive" size="sm" onClick={() => removeUser(selectedUser)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    <Separator />
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Módulo</TableHead>
+                          <TableHead className="w-[100px] text-center">Visualizar</TableHead>
+                          <TableHead className="w-[100px] text-center">Editar</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {MODULOS.map((m) => (
+                          <TableRow key={m.key}>
+                            <TableCell className="text-sm">{m.label}</TableCell>
+                            <TableCell className="text-center">
+                              <Switch
+                                checked={perms[m.key]?.ver ?? true}
+                                onCheckedChange={(v) => togglePerm(selectedUser, m.key, "pode_visualizar", v)}
+                              />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Switch
+                                checked={perms[m.key]?.editar ?? false}
+                                onCheckedChange={(v) => togglePerm(selectedUser, m.key, "pode_editar", v)}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                );
+              })() : (
+                <p className="text-sm text-muted-foreground py-8 text-center">Clique em um usuário para gerenciar suas permissões.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
