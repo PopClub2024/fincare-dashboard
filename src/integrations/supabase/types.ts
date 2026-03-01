@@ -861,6 +861,54 @@ export type Database = {
           },
         ]
       }
+      feegow_sync_log: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          id: string
+          payload: Json
+          rascunho_id: string | null
+          response: Json | null
+          status: Database["public"]["Enums"]["status_sync_log"]
+          tipo: Database["public"]["Enums"]["tipo_sync_feegow"]
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          id?: string
+          payload?: Json
+          rascunho_id?: string | null
+          response?: Json | null
+          status?: Database["public"]["Enums"]["status_sync_log"]
+          tipo: Database["public"]["Enums"]["tipo_sync_feegow"]
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          id?: string
+          payload?: Json
+          rascunho_id?: string | null
+          response?: Json | null
+          status?: Database["public"]["Enums"]["status_sync_log"]
+          tipo?: Database["public"]["Enums"]["tipo_sync_feegow"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feegow_sync_log_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feegow_sync_log_rascunho_id_fkey"
+            columns: ["rascunho_id"]
+            isOneToOne: false
+            referencedRelation: "precos_rascunho"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       imposto_pagamentos: {
         Row: {
           clinica_id: string
@@ -1129,6 +1177,62 @@ export type Database = {
           },
         ]
       }
+      pagadores: {
+        Row: {
+          ativo: boolean
+          cf_alocado_pct: number | null
+          cf_alocado_valor: number | null
+          clinica_id: string
+          codigo_feegow: string | null
+          comissao_faturista_pct: number | null
+          created_at: string
+          id: string
+          nome: string
+          tipo: Database["public"]["Enums"]["tipo_pagador"]
+          updated_at: string
+          usa_comissao_faturista: boolean
+          usa_taxa_cartao: boolean
+        }
+        Insert: {
+          ativo?: boolean
+          cf_alocado_pct?: number | null
+          cf_alocado_valor?: number | null
+          clinica_id: string
+          codigo_feegow?: string | null
+          comissao_faturista_pct?: number | null
+          created_at?: string
+          id?: string
+          nome: string
+          tipo?: Database["public"]["Enums"]["tipo_pagador"]
+          updated_at?: string
+          usa_comissao_faturista?: boolean
+          usa_taxa_cartao?: boolean
+        }
+        Update: {
+          ativo?: boolean
+          cf_alocado_pct?: number | null
+          cf_alocado_valor?: number | null
+          clinica_id?: string
+          codigo_feegow?: string | null
+          comissao_faturista_pct?: number | null
+          created_at?: string
+          id?: string
+          nome?: string
+          tipo?: Database["public"]["Enums"]["tipo_pagador"]
+          updated_at?: string
+          usa_comissao_faturista?: boolean
+          usa_taxa_cartao?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pagadores_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parametros_financeiros: {
         Row: {
           chave: string
@@ -1248,6 +1352,297 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "prazos_recebimento_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      precos_procedimento: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          custo_variavel: number | null
+          desconto_pct: number | null
+          id: string
+          observacao: string | null
+          origem: Database["public"]["Enums"]["origem_preco"]
+          pagador_id: string
+          preco_bruto: number
+          procedimento_id: string
+          repasse_medico: number | null
+          repasse_medico_pct: number | null
+          status: Database["public"]["Enums"]["status_preco"]
+          vigente_ate: string | null
+          vigente_de: string
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          custo_variavel?: number | null
+          desconto_pct?: number | null
+          id?: string
+          observacao?: string | null
+          origem?: Database["public"]["Enums"]["origem_preco"]
+          pagador_id: string
+          preco_bruto: number
+          procedimento_id: string
+          repasse_medico?: number | null
+          repasse_medico_pct?: number | null
+          status?: Database["public"]["Enums"]["status_preco"]
+          vigente_ate?: string | null
+          vigente_de: string
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          custo_variavel?: number | null
+          desconto_pct?: number | null
+          id?: string
+          observacao?: string | null
+          origem?: Database["public"]["Enums"]["origem_preco"]
+          pagador_id?: string
+          preco_bruto?: number
+          procedimento_id?: string
+          repasse_medico?: number | null
+          repasse_medico_pct?: number | null
+          status?: Database["public"]["Enums"]["status_preco"]
+          vigente_ate?: string | null
+          vigente_de?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "precos_procedimento_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "precos_procedimento_pagador_id_fkey"
+            columns: ["pagador_id"]
+            isOneToOne: false
+            referencedRelation: "pagadores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "precos_procedimento_procedimento_id_fkey"
+            columns: ["procedimento_id"]
+            isOneToOne: false
+            referencedRelation: "procedimentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      precos_rascunho: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          id: string
+          nome_cenario: string
+          status: Database["public"]["Enums"]["status_rascunho"]
+          updated_at: string
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          id?: string
+          nome_cenario: string
+          status?: Database["public"]["Enums"]["status_rascunho"]
+          updated_at?: string
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          id?: string
+          nome_cenario?: string
+          status?: Database["public"]["Enums"]["status_rascunho"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "precos_rascunho_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      precos_rascunho_itens: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          feegow_response: Json | null
+          id: string
+          novo_preco_bruto: number
+          novo_repasse: number | null
+          observacao: string | null
+          pagador_id: string
+          procedimento_id: string
+          rascunho_id: string
+          status_sync_feegow: Database["public"]["Enums"]["status_sync_feegow"]
+          vigente_de: string
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          feegow_response?: Json | null
+          id?: string
+          novo_preco_bruto: number
+          novo_repasse?: number | null
+          observacao?: string | null
+          pagador_id: string
+          procedimento_id: string
+          rascunho_id: string
+          status_sync_feegow?: Database["public"]["Enums"]["status_sync_feegow"]
+          vigente_de: string
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          feegow_response?: Json | null
+          id?: string
+          novo_preco_bruto?: number
+          novo_repasse?: number | null
+          observacao?: string | null
+          pagador_id?: string
+          procedimento_id?: string
+          rascunho_id?: string
+          status_sync_feegow?: Database["public"]["Enums"]["status_sync_feegow"]
+          vigente_de?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "precos_rascunho_itens_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "precos_rascunho_itens_pagador_id_fkey"
+            columns: ["pagador_id"]
+            isOneToOne: false
+            referencedRelation: "pagadores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "precos_rascunho_itens_procedimento_id_fkey"
+            columns: ["procedimento_id"]
+            isOneToOne: false
+            referencedRelation: "procedimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "precos_rascunho_itens_rascunho_id_fkey"
+            columns: ["rascunho_id"]
+            isOneToOne: false
+            referencedRelation: "precos_rascunho"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      premissas_precificacao: {
+        Row: {
+          aliquota_lp_pct: number
+          cf_total_mensal: number
+          clinica_id: string
+          comissao_faturista_pct: number
+          created_at: string
+          id: string
+          meta_lucro_conservador: number
+          meta_lucro_excelente: number
+          meta_lucro_ideal: number
+          meta_lucro_saudavel: number
+          meta_lucro_sobrevivencia: number
+          taxa_cartao_pct: number
+          updated_at: string
+        }
+        Insert: {
+          aliquota_lp_pct?: number
+          cf_total_mensal?: number
+          clinica_id: string
+          comissao_faturista_pct?: number
+          created_at?: string
+          id?: string
+          meta_lucro_conservador?: number
+          meta_lucro_excelente?: number
+          meta_lucro_ideal?: number
+          meta_lucro_saudavel?: number
+          meta_lucro_sobrevivencia?: number
+          taxa_cartao_pct?: number
+          updated_at?: string
+        }
+        Update: {
+          aliquota_lp_pct?: number
+          cf_total_mensal?: number
+          clinica_id?: string
+          comissao_faturista_pct?: number
+          created_at?: string
+          id?: string
+          meta_lucro_conservador?: number
+          meta_lucro_excelente?: number
+          meta_lucro_ideal?: number
+          meta_lucro_saudavel?: number
+          meta_lucro_sobrevivencia?: number
+          taxa_cartao_pct?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "premissas_precificacao_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: true
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      procedimentos: {
+        Row: {
+          ativo: boolean
+          clinica_id: string
+          codigo_feegow: string | null
+          created_at: string
+          especialidade: string | null
+          id: string
+          nome: string
+          tipo: Database["public"]["Enums"]["tipo_procedimento"]
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          clinica_id: string
+          codigo_feegow?: string | null
+          created_at?: string
+          especialidade?: string | null
+          id?: string
+          nome: string
+          tipo?: Database["public"]["Enums"]["tipo_procedimento"]
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          clinica_id?: string
+          codigo_feegow?: string | null
+          created_at?: string
+          especialidade?: string | null
+          id?: string
+          nome?: string
+          tipo?: Database["public"]["Enums"]["tipo_procedimento"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "procedimentos_clinica_id_fkey"
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
@@ -1820,6 +2215,7 @@ export type Database = {
         | "procedimento"
         | "produto"
       origem_pagamento: "extrato" | "manual"
+      origem_preco: "importado_planilha" | "manual" | "sync_feegow"
       status_comprovante: "pendente" | "processado" | "erro" | "rejeitado"
       status_conciliacao: "pendente" | "conciliado" | "divergente"
       status_conta: "pendente" | "pago" | "vencido" | "cancelado"
@@ -1830,13 +2226,20 @@ export type Database = {
         | "classificado"
         | "pago"
         | "cancelado"
+      status_preco: "publicado" | "inativo"
       status_presenca: "confirmado" | "atendido" | "faltou" | "cancelado"
+      status_rascunho: "rascunho" | "aprovado" | "publicado" | "cancelado"
       status_recebimento: "a_receber" | "recebido" | "inadimplente" | "glosado"
       status_sync: "em_andamento" | "sucesso" | "erro"
+      status_sync_feegow: "nao_enviado" | "enviado" | "confirmado" | "erro"
+      status_sync_log: "sucesso" | "erro" | "parcial"
       tipo_despesa: "fixa" | "variavel"
       tipo_destino_regra: "divida" | "imposto" | "conta_pagar"
       tipo_divida: "curto_prazo" | "longo_prazo"
       tipo_imposto: "simples" | "fgts" | "inss" | "iss"
+      tipo_pagador: "particular" | "convenio"
+      tipo_procedimento: "consulta" | "exame" | "procedimento" | "servico"
+      tipo_sync_feegow: "sync_procedimentos" | "update_precos"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1990,6 +2393,7 @@ export const Constants = {
         "produto",
       ],
       origem_pagamento: ["extrato", "manual"],
+      origem_preco: ["importado_planilha", "manual", "sync_feegow"],
       status_comprovante: ["pendente", "processado", "erro", "rejeitado"],
       status_conciliacao: ["pendente", "conciliado", "divergente"],
       status_conta: ["pendente", "pago", "vencido", "cancelado"],
@@ -2001,13 +2405,20 @@ export const Constants = {
         "pago",
         "cancelado",
       ],
+      status_preco: ["publicado", "inativo"],
       status_presenca: ["confirmado", "atendido", "faltou", "cancelado"],
+      status_rascunho: ["rascunho", "aprovado", "publicado", "cancelado"],
       status_recebimento: ["a_receber", "recebido", "inadimplente", "glosado"],
       status_sync: ["em_andamento", "sucesso", "erro"],
+      status_sync_feegow: ["nao_enviado", "enviado", "confirmado", "erro"],
+      status_sync_log: ["sucesso", "erro", "parcial"],
       tipo_despesa: ["fixa", "variavel"],
       tipo_destino_regra: ["divida", "imposto", "conta_pagar"],
       tipo_divida: ["curto_prazo", "longo_prazo"],
       tipo_imposto: ["simples", "fgts", "inss", "iss"],
+      tipo_pagador: ["particular", "convenio"],
+      tipo_procedimento: ["consulta", "exame", "procedimento", "servico"],
+      tipo_sync_feegow: ["sync_procedimentos", "update_precos"],
     },
   },
 } as const
