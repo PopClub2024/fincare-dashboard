@@ -379,13 +379,27 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Auth check
+  // Auth check: webhook secret OR service role OR valid Supabase JWT
   if (!verifyWebhookAuth(req)) {
-    // Also allow Supabase service role auth
     const authHeader = req.headers.get("authorization") || "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    if (!authHeader.includes(serviceKey) && authHeader !== `Bearer ${serviceKey}`) {
-      return jsonResponse({ error: "Unauthorized. Provide x-webhook-secret header." }, 401);
+    const isServiceRole = authHeader.includes(serviceKey) || authHeader === `Bearer ${serviceKey}`;
+    
+    if (!isServiceRole) {
+      // Try validating as a logged-in user via Supabase JWT
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const token = authHeader.replace("Bearer ", "");
+      if (!token) {
+        return jsonResponse({ error: "Unauthorized. Provide x-webhook-secret header or valid auth token." }, 401);
+      }
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      const { data: claims, error: claimsErr } = await userClient.auth.getUser(token);
+      if (claimsErr || !claims?.user) {
+        return jsonResponse({ error: "Unauthorized. Invalid auth token." }, 401);
+      }
     }
   }
 
