@@ -16,6 +16,8 @@ import FluxoDeCaixa from "./pages/FluxoDeCaixa";
 import ContasAPagar from "./pages/ContasAPagar";
 import ContasAReceber from "./pages/ContasAReceber";
 import Configuracoes from "./pages/Configuracoes";
+import Endividamento from "./pages/Endividamento";
+import Impostos from "./pages/Impostos";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +41,8 @@ const App = () => (
             <Route path="/caixa" element={<ProtectedRoute><Caixa /></ProtectedRoute>} />
             <Route path="/contas-a-receber" element={<ProtectedRoute><ContasAReceber /></ProtectedRoute>} />
             <Route path="/contas-a-pagar" element={<ProtectedRoute><ContasAPagar /></ProtectedRoute>} />
+            <Route path="/endividamento" element={<ProtectedRoute><Endividamento /></ProtectedRoute>} />
+            <Route path="/impostos" element={<ProtectedRoute><Impostos /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
