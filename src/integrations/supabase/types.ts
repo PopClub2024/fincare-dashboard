@@ -566,6 +566,68 @@ export type Database = {
           },
         ]
       }
+      dre_historico_mensal: {
+        Row: {
+          ano: number
+          cf: number
+          clinica_id: string
+          created_at: string
+          id: string
+          impostos: number
+          mc: number
+          mc_pct: number
+          mes: number
+          regime_tributario: string | null
+          repasses: number
+          resultado: number
+          resultado_pct: number
+          rt: number
+          taxa_cartao: number
+        }
+        Insert: {
+          ano: number
+          cf?: number
+          clinica_id: string
+          created_at?: string
+          id?: string
+          impostos?: number
+          mc?: number
+          mc_pct?: number
+          mes: number
+          regime_tributario?: string | null
+          repasses?: number
+          resultado?: number
+          resultado_pct?: number
+          rt?: number
+          taxa_cartao?: number
+        }
+        Update: {
+          ano?: number
+          cf?: number
+          clinica_id?: string
+          created_at?: string
+          id?: string
+          impostos?: number
+          mc?: number
+          mc_pct?: number
+          mes?: number
+          regime_tributario?: string | null
+          repasses?: number
+          resultado?: number
+          resultado_pct?: number
+          rt?: number
+          taxa_cartao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_historico_mensal_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dre_mapeamento_contas: {
         Row: {
           ativo: boolean
@@ -859,6 +921,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "plano_contas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      receita_canal_mensal: {
+        Row: {
+          ano: number
+          canal: string
+          clinica_id: string
+          created_at: string
+          id: string
+          mes: number
+          valor: number
+        }
+        Insert: {
+          ano: number
+          canal: string
+          clinica_id: string
+          created_at?: string
+          id?: string
+          mes: number
+          valor?: number
+        }
+        Update: {
+          ano?: number
+          canal?: string
+          clinica_id?: string
+          created_at?: string
+          id?: string
+          mes?: number
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receita_canal_mensal_clinica_id_fkey"
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"

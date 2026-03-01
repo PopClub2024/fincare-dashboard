@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { format, subYears, startOfYear, endOfYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import ReceitaPorCanal from "@/components/dashboard/ReceitaPorCanal";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -68,6 +69,72 @@ interface DreData {
   mensal: DreMonth[];
 }
 
+// Convert historico rows to DreData format
+function historicoToDreData(rows: any[]): DreData {
+  const mensal: DreMonth[] = rows.map((r) => ({
+    mes: `${r.ano}-${String(r.mes).padStart(2, "0")}`,
+    mes_label: `${MONTH_NAMES[r.mes - 1]}/${String(r.ano).slice(2)}`,
+    rt: Number(r.rt),
+    impostos: Number(r.impostos),
+    taxa_cartao: Number(r.taxa_cartao),
+    repasses: Number(r.repasses),
+    mc: Number(r.mc),
+    mc_pct: Number(r.mc_pct),
+    cf: Number(r.cf),
+    resultado: Number(r.resultado),
+    resultado_pct: Number(r.resultado_pct),
+    receita_cartao: 0,
+    imposto_info: r.regime_tributario ? { nome: r.regime_tributario } : {},
+    taxa_info: {},
+  }));
+
+  const cards: DreCards = {
+    rt: mensal.reduce((s, m) => s + m.rt, 0),
+    impostos: mensal.reduce((s, m) => s + m.impostos, 0),
+    taxa_cartao: mensal.reduce((s, m) => s + m.taxa_cartao, 0),
+    repasses: mensal.reduce((s, m) => s + m.repasses, 0),
+    mc: mensal.reduce((s, m) => s + m.mc, 0),
+    mc_pct: 0,
+    cf: mensal.reduce((s, m) => s + m.cf, 0),
+    resultado: mensal.reduce((s, m) => s + m.resultado, 0),
+    resultado_pct: 0,
+  };
+  const totalRt = cards.rt;
+  cards.mc_pct = totalRt > 0 ? Math.round((cards.mc / totalRt) * 1000) / 10 : 0;
+  cards.resultado_pct = totalRt > 0 ? Math.round((cards.resultado / totalRt) * 1000) / 10 : 0;
+
+  return { cards, mensal };
+}
+
+async function fetchDreYear(clinicaId: string, year: number): Promise<DreData | null> {
+  // Try live data first
+  const { data: liveResult, error: liveError } = await supabase.rpc("get_dre", {
+    _start_date: `${year}-01-01`,
+    _end_date: `${year}-12-31`,
+    _filtros: {},
+  });
+
+  if (!liveError && liveResult) {
+    const live = liveResult as unknown as DreData;
+    if (live.cards.rt > 0) return live;
+  }
+
+  // Fallback to historical data
+  const { data: histRows, error: histError } = await supabase
+    .from("dre_historico_mensal")
+    .select("*")
+    .eq("clinica_id", clinicaId)
+    .eq("ano", year)
+    .order("mes");
+
+  if (!histError && histRows && histRows.length > 0) {
+    return historicoToDreData(histRows);
+  }
+
+  // Return live data even if zero (for current year with no data yet)
+  return liveResult ? (liveResult as unknown as DreData) : null;
+}
+
 export default function DRE() {
   const { clinicaId } = useAuth();
   const currentYear = new Date().getFullYear();
@@ -87,21 +154,11 @@ export default function DRE() {
     setLoading(true);
     try {
       const [res1, res2] = await Promise.all([
-        supabase.rpc("get_dre", {
-          _start_date: `${year}-01-01`,
-          _end_date: `${year}-12-31`,
-          _filtros: {},
-        }),
-        supabase.rpc("get_dre", {
-          _start_date: `${compareYear}-01-01`,
-          _end_date: `${compareYear}-12-31`,
-          _filtros: {},
-        }),
+        fetchDreYear(clinicaId!, year),
+        fetchDreYear(clinicaId!, compareYear),
       ]);
-      if (res1.error) throw res1.error;
-      if (res2.error) throw res2.error;
-      setData(res1.data as unknown as DreData);
-      setCompareData(res2.data as unknown as DreData);
+      setData(res1);
+      setCompareData(res2);
     } catch (e: any) {
       toast.error("Erro ao carregar DRE: " + e.message);
     } finally {
@@ -233,8 +290,9 @@ export default function DRE() {
         )}
 
         <Tabs defaultValue="mensal" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 bg-muted">
+          <TabsList className="grid w-full grid-cols-4 bg-muted">
             <TabsTrigger value="mensal">Análise Mensal</TabsTrigger>
+            <TabsTrigger value="canais">Receita por Canal</TabsTrigger>
             <TabsTrigger value="mom">Mês a Mês</TabsTrigger>
             <TabsTrigger value="yoy">Comparativo Anual</TabsTrigger>
           </TabsList>
@@ -259,14 +317,14 @@ export default function DRE() {
                       <>
                         <DreRow label="Receita Bruta (RT)" values={data.mensal.map((m) => m.rt)} total={data.cards.rt} bold />
                         <DreRow label="(-) Impostos LP" values={data.mensal.map((m) => m.impostos)} total={data.cards.impostos} negative expandable expanded={expandedRows.has("imp")} onToggle={() => toggleRow("imp")} />
-                        {expandedRows.has("imp") && data.mensal.some((m) => m.imposto_info?.percentual) && (
+                        {expandedRows.has("imp") && data.mensal.some((m) => m.imposto_info?.percentual || m.imposto_info?.nome) && (
                           <TableRow className="bg-muted/30">
                             <TableCell className="sticky left-0 bg-muted/30 z-10 pl-8 text-xs text-muted-foreground">
-                              {data.mensal[0]?.imposto_info?.nome || "LP"} ({data.mensal[0]?.imposto_info?.percentual}%)
+                              {data.mensal[0]?.imposto_info?.nome || "LP"} {data.mensal[0]?.imposto_info?.percentual ? `(${data.mensal[0].imposto_info.percentual}%)` : ""}
                             </TableCell>
                             {data.mensal.map((m) => (
                               <TableCell key={m.mes} className="text-right text-xs text-muted-foreground">
-                                {m.imposto_info?.percentual ? `${m.imposto_info.percentual}%` : "⚠️"}
+                                {m.imposto_info?.percentual ? `${m.imposto_info.percentual}%` : m.imposto_info?.nome || "⚠️"}
                               </TableCell>
                             ))}
                             <TableCell />
@@ -276,7 +334,7 @@ export default function DRE() {
                         {expandedRows.has("taxa") && (
                           <TableRow className="bg-muted/30">
                             <TableCell className="sticky left-0 bg-muted/30 z-10 pl-8 text-xs text-muted-foreground">
-                              {data.mensal[0]?.taxa_info?.nome || "Taxa"} ({data.mensal[0]?.taxa_info?.percentual}%)
+                              {data.mensal[0]?.taxa_info?.nome || "Taxa"} {data.mensal[0]?.taxa_info?.percentual ? `(${data.mensal[0].taxa_info.percentual}%)` : ""}
                             </TableCell>
                             {data.mensal.map((m) => (
                               <TableCell key={m.mes} className="text-right text-xs text-muted-foreground">
@@ -298,6 +356,11 @@ export default function DRE() {
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Tab: Receita por Canal */}
+          <TabsContent value="canais" className="space-y-4">
+            {clinicaId && <ReceitaPorCanal clinicaId={clinicaId} ano={year} />}
           </TabsContent>
 
           {/* Tab: Mês a Mês (MoM) */}
