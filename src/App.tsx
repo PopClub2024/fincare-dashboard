@@ -26,6 +26,7 @@ import FeegowIntegracao from "./pages/FeegowIntegracao";
 import Automacoes from "./pages/Automacoes";
 import ImportInbox from "./pages/ImportInbox";
 import DebugOperacao from "./pages/DebugOperacao";
+import Convenios from "./pages/Convenios";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -60,6 +61,7 @@ const App = () => (
             <Route path="/operacao/automacoes" element={<ProtectedRoute><Automacoes /></ProtectedRoute>} />
             <Route path="/importacoes/inbox" element={<ProtectedRoute><ImportInbox /></ProtectedRoute>} />
             <Route path="/debug/operacao" element={<ProtectedRoute><DebugOperacao /></ProtectedRoute>} />
+            <Route path="/convenios" element={<ProtectedRoute><Convenios /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

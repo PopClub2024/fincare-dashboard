@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   LayoutDashboard, Receipt, FileText, ArrowDownCircle, ArrowUpCircle,
   Settings, LogOut, Menu, X, FileBarChart, Wallet, Landmark,
-  Tag, Building2, GitCompare, Plug, ChevronRight, Zap, Inbox, ClipboardCheck,
+  Tag, Building2, GitCompare, Plug, ChevronRight, Zap, Inbox, ClipboardCheck, HeartHandshake,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,7 @@ const navSections: NavSection[] = [
     items: [
       { label: "Contas a Receber", icon: ArrowDownCircle, path: "/contas-a-receber" },
       { label: "Contas a Pagar", icon: ArrowUpCircle, path: "/contas-a-pagar" },
+      { label: "Convênios", icon: HeartHandshake, path: "/convenios" },
       { label: "Endividamento", icon: Landmark, path: "/endividamento" },
     ],
   },

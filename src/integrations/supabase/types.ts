@@ -654,6 +654,272 @@ export type Database = {
           },
         ]
       }
+      convenio_faturamentos_nf: {
+        Row: {
+          clinica_id: string
+          competencia: string
+          convenio_id: string
+          created_at: string
+          data_emissao: string | null
+          data_pagamento: string | null
+          glosa_estimada: number | null
+          id: string
+          metadata: Json | null
+          numero_nf: string | null
+          observacoes: string | null
+          pendencia_recuperada: number | null
+          periodo_referencia: string | null
+          previsao_pagamento: string | null
+          status_pagamento: Database["public"]["Enums"]["status_pagamento_nf"]
+          updated_at: string
+          valor_calculado: number
+          valor_enviado: number | null
+          valor_liberado: number | null
+          valor_nf: number | null
+        }
+        Insert: {
+          clinica_id: string
+          competencia: string
+          convenio_id: string
+          created_at?: string
+          data_emissao?: string | null
+          data_pagamento?: string | null
+          glosa_estimada?: number | null
+          id?: string
+          metadata?: Json | null
+          numero_nf?: string | null
+          observacoes?: string | null
+          pendencia_recuperada?: number | null
+          periodo_referencia?: string | null
+          previsao_pagamento?: string | null
+          status_pagamento?: Database["public"]["Enums"]["status_pagamento_nf"]
+          updated_at?: string
+          valor_calculado?: number
+          valor_enviado?: number | null
+          valor_liberado?: number | null
+          valor_nf?: number | null
+        }
+        Update: {
+          clinica_id?: string
+          competencia?: string
+          convenio_id?: string
+          created_at?: string
+          data_emissao?: string | null
+          data_pagamento?: string | null
+          glosa_estimada?: number | null
+          id?: string
+          metadata?: Json | null
+          numero_nf?: string | null
+          observacoes?: string | null
+          pendencia_recuperada?: number | null
+          periodo_referencia?: string | null
+          previsao_pagamento?: string | null
+          status_pagamento?: Database["public"]["Enums"]["status_pagamento_nf"]
+          updated_at?: string
+          valor_calculado?: number
+          valor_enviado?: number | null
+          valor_liberado?: number | null
+          valor_nf?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "convenio_faturamentos_nf_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "convenio_faturamentos_nf_convenio_id_fkey"
+            columns: ["convenio_id"]
+            isOneToOne: false
+            referencedRelation: "convenios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      convenio_glosas: {
+        Row: {
+          clinica_id: string
+          competencia: string
+          convenio_id: string
+          created_at: string
+          data_pagamento: string | null
+          glosa_devida: number | null
+          id: string
+          metadata: Json | null
+          nf_id: string | null
+          observacao_pagamento: string | null
+          observacoes: string | null
+          pago: boolean
+          protocolo: string | null
+          status_recurso: Database["public"]["Enums"]["status_recurso_glosa"]
+          updated_at: string
+          valor_a_recorrer: number | null
+          valor_apresentado: number
+          valor_aprovado: number
+          valor_glosado: number
+          valor_liberado: number | null
+          valor_negado: number | null
+          valor_pago_recurso: number | null
+          valor_recursado: number | null
+        }
+        Insert: {
+          clinica_id: string
+          competencia: string
+          convenio_id: string
+          created_at?: string
+          data_pagamento?: string | null
+          glosa_devida?: number | null
+          id?: string
+          metadata?: Json | null
+          nf_id?: string | null
+          observacao_pagamento?: string | null
+          observacoes?: string | null
+          pago?: boolean
+          protocolo?: string | null
+          status_recurso?: Database["public"]["Enums"]["status_recurso_glosa"]
+          updated_at?: string
+          valor_a_recorrer?: number | null
+          valor_apresentado?: number
+          valor_aprovado?: number
+          valor_glosado?: number
+          valor_liberado?: number | null
+          valor_negado?: number | null
+          valor_pago_recurso?: number | null
+          valor_recursado?: number | null
+        }
+        Update: {
+          clinica_id?: string
+          competencia?: string
+          convenio_id?: string
+          created_at?: string
+          data_pagamento?: string | null
+          glosa_devida?: number | null
+          id?: string
+          metadata?: Json | null
+          nf_id?: string | null
+          observacao_pagamento?: string | null
+          observacoes?: string | null
+          pago?: boolean
+          protocolo?: string | null
+          status_recurso?: Database["public"]["Enums"]["status_recurso_glosa"]
+          updated_at?: string
+          valor_a_recorrer?: number | null
+          valor_apresentado?: number
+          valor_aprovado?: number
+          valor_glosado?: number
+          valor_liberado?: number | null
+          valor_negado?: number | null
+          valor_pago_recurso?: number | null
+          valor_recursado?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "convenio_glosas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "convenio_glosas_convenio_id_fkey"
+            columns: ["convenio_id"]
+            isOneToOne: false
+            referencedRelation: "convenios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "convenio_glosas_nf_id_fkey"
+            columns: ["nf_id"]
+            isOneToOne: false
+            referencedRelation: "convenio_faturamentos_nf"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      convenio_producao_itens: {
+        Row: {
+          clinica_id: string
+          convenio_id: string
+          created_at: string
+          data_competencia: string
+          desconto: number
+          especialidade: string | null
+          feegow_invoice_id: string | null
+          feegow_item_key: string | null
+          id: string
+          linha_receita: Database["public"]["Enums"]["linha_receita_convenio"]
+          medico_id: string | null
+          metadata: Json | null
+          procedimento_id: string | null
+          procedimento_nome: string | null
+          quantidade: number
+          valor_bruto: number
+          valor_liquido: number
+        }
+        Insert: {
+          clinica_id: string
+          convenio_id: string
+          created_at?: string
+          data_competencia: string
+          desconto?: number
+          especialidade?: string | null
+          feegow_invoice_id?: string | null
+          feegow_item_key?: string | null
+          id?: string
+          linha_receita?: Database["public"]["Enums"]["linha_receita_convenio"]
+          medico_id?: string | null
+          metadata?: Json | null
+          procedimento_id?: string | null
+          procedimento_nome?: string | null
+          quantidade?: number
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Update: {
+          clinica_id?: string
+          convenio_id?: string
+          created_at?: string
+          data_competencia?: string
+          desconto?: number
+          especialidade?: string | null
+          feegow_invoice_id?: string | null
+          feegow_item_key?: string | null
+          id?: string
+          linha_receita?: Database["public"]["Enums"]["linha_receita_convenio"]
+          medico_id?: string | null
+          metadata?: Json | null
+          procedimento_id?: string | null
+          procedimento_nome?: string | null
+          quantidade?: number
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "convenio_producao_itens_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "convenio_producao_itens_convenio_id_fkey"
+            columns: ["convenio_id"]
+            isOneToOne: false
+            referencedRelation: "convenios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "convenio_producao_itens_medico_id_fkey"
+            columns: ["medico_id"]
+            isOneToOne: false
+            referencedRelation: "medicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       convenios: {
         Row: {
           ativo: boolean
@@ -3059,6 +3325,10 @@ export type Database = {
         Args: { _end_date: string; _filtros?: Json; _start_date: string }
         Returns: Json
       }
+      get_convenio_kpis: {
+        Args: { _convenio_id?: string; _end_date: string; _start_date: string }
+        Returns: Json
+      }
       get_discount_summary: {
         Args: { _end_date: string; _start_date: string }
         Returns: Json
@@ -3121,6 +3391,11 @@ export type Database = {
         | "exame"
         | "procedimento"
         | "produto"
+      linha_receita_convenio:
+        | "consulta"
+        | "exame"
+        | "prestacao_servicos"
+        | "outros"
       origem_pagamento: "extrato" | "manual"
       origem_preco: "importado_planilha" | "manual" | "sync_feegow"
       status_comprovante: "pendente" | "processado" | "erro" | "rejeitado"
@@ -3133,6 +3408,13 @@ export type Database = {
         | "classificado"
         | "pago"
         | "cancelado"
+      status_pagamento_nf:
+        | "a_emitir"
+        | "emitida"
+        | "enviada"
+        | "a_receber"
+        | "paga"
+        | "atrasada"
       status_preco: "publicado" | "inativo"
       status_presenca:
         | "confirmado"
@@ -3145,6 +3427,12 @@ export type Database = {
         | "cancelado_paciente"
       status_rascunho: "rascunho" | "aprovado" | "publicado" | "cancelado"
       status_recebimento: "a_receber" | "recebido" | "inadimplente" | "glosado"
+      status_recurso_glosa:
+        | "nao_iniciado"
+        | "em_andamento"
+        | "concluido"
+        | "negado"
+        | "parcial"
       status_sync: "em_andamento" | "sucesso" | "erro"
       status_sync_feegow: "nao_enviado" | "enviado" | "confirmado" | "erro"
       status_sync_log: "sucesso" | "erro" | "parcial"
@@ -3308,6 +3596,12 @@ export const Constants = {
         "procedimento",
         "produto",
       ],
+      linha_receita_convenio: [
+        "consulta",
+        "exame",
+        "prestacao_servicos",
+        "outros",
+      ],
       origem_pagamento: ["extrato", "manual"],
       origem_preco: ["importado_planilha", "manual", "sync_feegow"],
       status_comprovante: ["pendente", "processado", "erro", "rejeitado"],
@@ -3320,6 +3614,14 @@ export const Constants = {
         "classificado",
         "pago",
         "cancelado",
+      ],
+      status_pagamento_nf: [
+        "a_emitir",
+        "emitida",
+        "enviada",
+        "a_receber",
+        "paga",
+        "atrasada",
       ],
       status_preco: ["publicado", "inativo"],
       status_presenca: [
@@ -3334,6 +3636,13 @@ export const Constants = {
       ],
       status_rascunho: ["rascunho", "aprovado", "publicado", "cancelado"],
       status_recebimento: ["a_receber", "recebido", "inadimplente", "glosado"],
+      status_recurso_glosa: [
+        "nao_iniciado",
+        "em_andamento",
+        "concluido",
+        "negado",
+        "parcial",
+      ],
       status_sync: ["em_andamento", "sucesso", "erro"],
       status_sync_feegow: ["nao_enviado", "enviado", "confirmado", "erro"],
       status_sync_log: ["sucesso", "erro", "parcial"],
