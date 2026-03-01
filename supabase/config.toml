@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.import-ofx]
 verify_jwt = false
+
+[functions.sync-getnet]
+verify_jwt = false

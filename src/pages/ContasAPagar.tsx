@@ -357,6 +357,7 @@ function TabPlanoContas() {
       .from("plano_contas")
       .select("*")
       .eq("clinica_id", clinicaId!)
+      .eq("indicador", "debito")
       .order("codigo_estruturado");
     setContas((data as any[]) || []);
     setLoading(false);
