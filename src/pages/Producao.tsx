@@ -1,10 +1,17 @@
 import { useState } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import DashboardFilters, { DashboardFilterValues, defaultFilters } from "@/components/dashboard/DashboardFilters";
+import DashboardFilters, { DashboardFilterValues } from "@/components/dashboard/DashboardFilters";
 import TabProducao from "@/components/dashboard/TabProducao";
+import { startOfMonth, endOfMonth } from "date-fns";
+
+const producaoDefaultFilters: DashboardFilterValues = {
+  dateFrom: startOfMonth(new Date(2026, 0, 1)),
+  dateTo: endOfMonth(new Date()),
+  basCalculo: "competencia",
+};
 
 export default function Producao() {
-  const [filters, setFilters] = useState<DashboardFilterValues>(defaultFilters);
+  const [filters, setFilters] = useState<DashboardFilterValues>(producaoDefaultFilters);
 
   return (
     <DashboardLayout>

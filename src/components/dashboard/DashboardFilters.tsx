@@ -21,7 +21,7 @@ interface Props {
 }
 
 export const defaultFilters: DashboardFilterValues = {
-  dateFrom: startOfMonth(subMonths(new Date(), 11)),
+  dateFrom: startOfMonth(new Date(2025, 0, 1)),
   dateTo: endOfMonth(new Date()),
   basCalculo: "competencia",
 };
