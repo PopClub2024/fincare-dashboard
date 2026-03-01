@@ -10,6 +10,7 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "DRE", icon: FileBarChart, path: "/dre" },
   { label: "Fluxo de Caixa", icon: Wallet, path: "/fluxo-de-caixa" },
+  { label: "Produção", icon: FileText, path: "/producao" },
   { label: "Caixa", icon: Receipt, path: "/caixa" },
   { label: "Contas a Receber", icon: ArrowDownCircle, path: "/contas-a-receber" },
   { label: "Contas a Pagar", icon: ArrowUpCircle, path: "/contas-a-pagar" },
