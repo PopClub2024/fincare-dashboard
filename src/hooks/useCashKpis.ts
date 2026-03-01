@@ -38,6 +38,11 @@ export interface CashCards {
   ap_a_vencer: number;
   ncg: number;
   capital_giro: number;
+  entradas_conciliadas: number;
+  entradas_nao_identificadas: number;
+  saidas_conciliadas: number;
+  saidas_nao_identificadas: number;
+  pct_conciliacao: number;
 }
 
 export interface AgingData {
@@ -60,6 +65,7 @@ export interface CashKpisData {
   aging: AgingData;
   top_saidas: TopSaida[];
   has_live_data: boolean;
+  has_bank_data: boolean;
 }
 
 export function useCashKpis(dateFrom: Date, dateTo: Date) {

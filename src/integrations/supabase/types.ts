@@ -2747,6 +2747,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_cash_forecast: {
+        Args: { _end_date: string; _start_date: string }
+        Returns: Json
+      }
       get_cash_kpis: {
         Args: { _end_date: string; _filtros?: Json; _start_date: string }
         Returns: Json

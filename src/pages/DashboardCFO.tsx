@@ -10,6 +10,7 @@ import TabAR from "@/components/dashboard/TabAR";
 import TabAP from "@/components/dashboard/TabAP";
 import TabOperacional from "@/components/dashboard/TabOperacional";
 import TabGrowth from "@/components/dashboard/TabGrowth";
+import TabConsultas from "@/components/dashboard/TabConsultas";
 
 export default function DashboardCFO() {
   const [filters, setFilters] = useState<DashboardFilterValues>(defaultFilters);
@@ -23,12 +24,13 @@ export default function DashboardCFO() {
         </div>
 
         <DashboardFilters filters={filters} onFilterChange={setFilters} />
-        <KpiCards />
+        <KpiCards dateFrom={filters.dateFrom} dateTo={filters.dateTo} />
 
         <Tabs defaultValue="dre" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-7 bg-muted">
+          <TabsList className="grid w-full grid-cols-8 bg-muted">
             <TabsTrigger value="dre">DRE</TabsTrigger>
             <TabsTrigger value="caixa">Caixa</TabsTrigger>
+            <TabsTrigger value="consultas">Consultas</TabsTrigger>
             <TabsTrigger value="capital">Capital Giro</TabsTrigger>
             <TabsTrigger value="ar">AR / Aging</TabsTrigger>
             <TabsTrigger value="ap">AP</TabsTrigger>
@@ -38,10 +40,11 @@ export default function DashboardCFO() {
 
           <TabsContent value="dre"><TabDRE dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
           <TabsContent value="caixa"><TabCaixa dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
+          <TabsContent value="consultas"><TabConsultas dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
           <TabsContent value="capital"><TabCapitalGiro dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
           <TabsContent value="ar"><TabAR dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
           <TabsContent value="ap"><TabAP dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
-          <TabsContent value="operacional"><TabOperacional /></TabsContent>
+          <TabsContent value="operacional"><TabOperacional dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
           <TabsContent value="growth"><TabGrowth /></TabsContent>
         </Tabs>
       </div>

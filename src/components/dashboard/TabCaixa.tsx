@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, BarChart, Bar, Legend, ComposedChart, Line } from "recharts";
 import { useCashKpis, CashKpisData } from "@/hooks/useCashKpis";
 import { DollarSign, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import CashForecast from "./CashForecast";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -37,7 +39,6 @@ export default function TabCaixa({ dateFrom, dateTo }: Props) {
     Saldo: m.saldo,
   }));
 
-  // Breakdown by category (only for historical data)
   const hasBreakdown = mensal.some((m) => m.mao_obra !== undefined);
 
   return (
@@ -59,6 +60,12 @@ export default function TabCaixa({ dateFrom, dateTo }: Props) {
       {!data.has_live_data && (
         <Badge variant="outline" className="text-xs">
           📊 Dados históricos (planilha consolidada)
+        </Badge>
+      )}
+
+      {(data as any).has_bank_data && (
+        <Badge variant="outline" className="text-xs">
+          🏦 Dados reais do extrato bancário
         </Badge>
       )}
 
@@ -142,6 +149,13 @@ export default function TabCaixa({ dateFrom, dateTo }: Props) {
           </CardContent>
         </Card>
       )}
+
+      {/* Cash Forecast */}
+      <Separator />
+      <div>
+        <h3 className="text-lg font-semibold text-foreground mb-4">📈 Previsão de Caixa</h3>
+        <CashForecast dateFrom={dateFrom} dateTo={dateTo} />
+      </div>
     </div>
   );
 }
