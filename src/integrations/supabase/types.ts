@@ -2963,7 +2963,15 @@ export type Database = {
         | "pago"
         | "cancelado"
       status_preco: "publicado" | "inativo"
-      status_presenca: "confirmado" | "atendido" | "faltou" | "cancelado"
+      status_presenca:
+        | "confirmado"
+        | "atendido"
+        | "faltou"
+        | "cancelado"
+        | "agendado"
+        | "em_espera"
+        | "em_atendimento"
+        | "cancelado_paciente"
       status_rascunho: "rascunho" | "aprovado" | "publicado" | "cancelado"
       status_recebimento: "a_receber" | "recebido" | "inadimplente" | "glosado"
       status_sync: "em_andamento" | "sucesso" | "erro"
@@ -3143,7 +3151,16 @@ export const Constants = {
         "cancelado",
       ],
       status_preco: ["publicado", "inativo"],
-      status_presenca: ["confirmado", "atendido", "faltou", "cancelado"],
+      status_presenca: [
+        "confirmado",
+        "atendido",
+        "faltou",
+        "cancelado",
+        "agendado",
+        "em_espera",
+        "em_atendimento",
+        "cancelado_paciente",
+      ],
       status_rascunho: ["rascunho", "aprovado", "publicado", "cancelado"],
       status_recebimento: ["a_receber", "recebido", "inadimplente", "glosado"],
       status_sync: ["em_andamento", "sucesso", "erro"],

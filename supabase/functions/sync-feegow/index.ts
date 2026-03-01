@@ -79,7 +79,6 @@ async function feegowFetch(url: string, headers: Record<string, string>, method 
 // ─── Concurrency guard ─────────────────────────────────────────
 async function acquireLock(supabase: any, clinicaId: string, action: string, dateStart: string, dateEnd: string): Promise<boolean> {
   const hash = makeRequestHash(clinicaId, action, dateStart, dateEnd);
-  // Check if there's a running log with the same hash in the last 10 minutes
   const { data } = await supabase
     .from("integracao_logs")
     .select("id")
@@ -100,27 +99,23 @@ async function buildLookupMaps(supabase: any, clinicaId: string) {
   ]);
 
   const medicos = new Map<string, string>();
-  for (const m of (medicosRes.data || [])) {
-    if (m.feegow_id) medicos.set(m.feegow_id, m.id);
-  }
+  for (const m of (medicosRes.data || [])) if (m.feegow_id) medicos.set(m.feegow_id, m.id);
   const convenios = new Map<string, string>();
-  for (const c of (conveniosRes.data || [])) {
-    if (c.feegow_id) convenios.set(c.feegow_id, c.id);
-  }
+  for (const c of (conveniosRes.data || [])) if (c.feegow_id) convenios.set(c.feegow_id, c.id);
   const pacientes = new Map<string, string>();
-  for (const p of (pacientesRes.data || [])) {
-    if (p.feegow_id) pacientes.set(p.feegow_id, p.id);
-  }
+  for (const p of (pacientesRes.data || [])) if (p.feegow_id) pacientes.set(p.feegow_id, p.id);
   return { medicos, convenios, pacientes };
 }
 
-// ─── SYNC METADATA ─────────────────────────────────────────────
-async function syncMetadata(supabase: any, clinicaId: string, headers: Record<string, string>) {
+// ─── SYNC METADATA (skip patients to avoid timeout) ────────────
+async function syncMetadata(supabase: any, clinicaId: string, headers: Record<string, string>, includePatients = false) {
   const result = { medicos: 0, salas: 0, convenios: 0, pacientes: 0, errors: [] as string[] };
 
+  // Professionals
   try {
     const data = await feegowFetch(`${FEEGOW_BASE}/professional/list`, headers);
-    for (const prof of (data.content || [])) {
+    const profs = data.content || [];
+    for (const prof of (Array.isArray(profs) ? profs : [])) {
       const { error } = await supabase.from("medicos").upsert({
         clinica_id: clinicaId,
         feegow_id: String(prof.professional_id || prof.id),
@@ -135,9 +130,11 @@ async function syncMetadata(supabase: any, clinicaId: string, headers: Record<st
     }
   } catch (e: any) { result.errors.push(`Médicos: ${e.message}`); }
 
+  // Treatment places (salas)
   try {
     const data = await feegowFetch(`${FEEGOW_BASE}/treatment-place/list`, headers);
-    for (const place of (data.content || [])) {
+    const places = data.content || [];
+    for (const place of (Array.isArray(places) ? places : [])) {
       const { error } = await supabase.from("salas").upsert({
         clinica_id: clinicaId,
         feegow_id: String(place.treatment_place_id || place.id),
@@ -150,9 +147,11 @@ async function syncMetadata(supabase: any, clinicaId: string, headers: Record<st
     }
   } catch (e: any) { result.errors.push(`Salas: ${e.message}`); }
 
+  // Insurance (convênios)
   try {
     const data = await feegowFetch(`${FEEGOW_BASE}/insurance/list`, headers);
-    for (const ins of (data.content || [])) {
+    const insurances = data.content || [];
+    for (const ins of (Array.isArray(insurances) ? insurances : [])) {
       const { error } = await supabase.from("convenios").upsert({
         clinica_id: clinicaId,
         feegow_id: String(ins.insurance_id || ins.id),
@@ -164,24 +163,32 @@ async function syncMetadata(supabase: any, clinicaId: string, headers: Record<st
     }
   } catch (e: any) { result.errors.push(`Convênios: ${e.message}`); }
 
-  try {
-    const data = await feegowFetch(`${FEEGOW_BASE}/patient/list`, headers);
-    for (const pat of (data.content || [])) {
-      const { error } = await supabase.from("pacientes").upsert({
-        clinica_id: clinicaId,
-        feegow_id: String(pat.patient_id || pat.id),
-        nome: pat.name || pat.nome || "Sem nome",
-        data_cadastro: pat.created_at || pat.data_cadastro || null,
-      }, { onConflict: "clinica_id,feegow_id" });
-      if (!error) result.pacientes++;
-      else result.errors.push(`Paciente: ${error.message}`);
-    }
-  } catch (e: any) { result.errors.push(`Pacientes: ${e.message}`); }
+  // Patients (optional - can be very large and cause timeouts)
+  if (includePatients) {
+    try {
+      const data = await feegowFetch(`${FEEGOW_BASE}/patient/list`, headers);
+      const patients = data.content || [];
+      for (const pat of (Array.isArray(patients) ? patients : [])) {
+        const { error } = await supabase.from("pacientes").upsert({
+          clinica_id: clinicaId,
+          feegow_id: String(pat.patient_id || pat.id),
+          nome: pat.name || pat.nome || "Sem nome",
+          data_cadastro: pat.created_at || pat.data_cadastro || null,
+        }, { onConflict: "clinica_id,feegow_id" });
+        if (!error) result.pacientes++;
+        else result.errors.push(`Paciente: ${error.message}`);
+      }
+    } catch (e: any) { result.errors.push(`Pacientes: ${e.message}`); }
+  }
 
   return result;
 }
 
-// ─── SYNC SALES (idempotent via upsert) ────────────────────────
+// ─── SYNC SALES ────────────────────────────────────────────────
+// Strategy: 
+//   1. Use appoints/search (rich data: patient, doctor, procedure, status)
+//   2. Build financial map from list-sales (invoice_id → amount)
+//   3. Also auto-create patients found in appoints that don't exist yet
 async function syncSales(
   supabase: any,
   clinicaId: string,
@@ -190,151 +197,212 @@ async function syncSales(
   dateEnd: string,
   unidadeId: number = 0
 ) {
-  const stats = { processados: 0, criados: 0, atualizados: 0, ignorados: 0, erros: [] as string[], fonte: "" };
+  const stats = { processados: 0, criados: 0, atualizados: 0, ignorados: 0, erros: [] as string[], fonte: "", detalhes: {} as any };
   const requestHash = makeRequestHash(clinicaId, "sales", dateStart, dateEnd);
 
-  // Concurrency guard
   const canProceed = await acquireLock(supabase, clinicaId, "sales", dateStart, dateEnd);
   if (!canProceed) {
-    return { ...stats, erros: ["Sync já em andamento para este período. Aguarde a conclusão."] };
+    return { ...stats, erros: ["Sync já em andamento para este período."] };
   }
 
-  const logId = await createLog(supabase, clinicaId, "feegow_sales", "sync_sales", "financial/list-sales|appoints/search", requestHash);
+  const logId = await createLog(supabase, clinicaId, "feegow_sales", "sync_sales", "appoints/search+list-sales", requestHash);
 
   try {
-    let sales: any[] = [];
-    let fonte = "";
-
-    // ─── Attempt 1: /financial/list-sales
-    const variations = [
-      `${FEEGOW_BASE}/financial/list-sales?date_start=${dateStart}&date_end=${dateEnd}&unidade_id=${unidadeId}`,
-      `${FEEGOW_BASE}/financial/list-sales?data_start=${toFeegowDate(dateStart)}&data_end=${toFeegowDate(dateEnd)}&unidade_id=${unidadeId}`,
-    ];
-
-    for (const url of variations) {
-      try {
-        const data = await feegowFetch(url, headers);
-        const items = data.content || data.data || [];
-        if (Array.isArray(items) && items.length > 0) {
-          sales = items;
-          fonte = "financial/list-sales";
-          break;
+    // ─── Step 1: Fetch financial data from list-sales ───
+    const salesMap = new Map<number, { amount: number; timestamp: string; type: string }>();
+    try {
+      const url = `${FEEGOW_BASE}/financial/list-sales?date_start=${dateStart}&date_end=${dateEnd}&unidade_id=${unidadeId}`;
+      const data = await feegowFetch(url, headers);
+      const items = data.content || [];
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          if (item.invoice_id) {
+            salesMap.set(Number(item.invoice_id), {
+              amount: Number(item.amount || 0),
+              timestamp: item.timestamp || "",
+              type: item.type || "gross",
+            });
+          }
         }
-        if (data.success === true) {
-          fonte = "financial/list-sales";
-          break;
-        }
-      } catch {
-        // Try next variation
       }
+      stats.detalhes.list_sales_count = salesMap.size;
+    } catch (e: any) {
+      stats.detalhes.list_sales_error = e.message;
     }
 
-    // ─── Attempt 2: Fallback to /appoints/search
-    if (sales.length === 0 && fonte === "") {
-      try {
-        const url = `${FEEGOW_BASE}/appoints/search?data_start=${toFeegowDate(dateStart)}&data_end=${toFeegowDate(dateEnd)}&list_procedures=1`;
-        const data = await feegowFetch(url, headers);
-        sales = data.content || [];
-        fonte = "appoints/search";
-      } catch (e: any) {
-        stats.erros.push(`Fallback appoints/search: ${e.message}`);
-      }
+    // ─── Step 2: Fetch rich appointment data ───
+    let appointments: any[] = [];
+    try {
+      const fd = toFeegowDate(dateStart);
+      const td = toFeegowDate(dateEnd);
+      const url = `${FEEGOW_BASE}/appoints/search?data_start=${fd}&data_end=${td}&list_procedures=1`;
+      const data = await feegowFetch(url, headers);
+      appointments = data.content || [];
+      if (!Array.isArray(appointments)) appointments = [];
+      stats.fonte = "appoints/search";
+      stats.detalhes.appoints_count = appointments.length;
+    } catch (e: any) {
+      stats.erros.push(`appoints/search: ${e.message}`);
     }
 
-    stats.fonte = fonte;
-
-    // Batch-load FK lookups
+    // ─── Step 3: Load FK lookups ───
     const lookups = await buildLookupMaps(supabase, clinicaId);
 
-    // Payment method mapping
-    const pmMap: Record<string, string> = {
-      "1": "dinheiro", "2": "cartao_debito", "3": "cartao_credito",
-      "4": "cheque", "5": "deposito", "6": "transferencia",
-      "7": "boleto", "11": "debito_automatico", "15": "pix",
-    };
-    const fpEnumMap: Record<string, string> = {
-      "2": "cartao_debito", "3": "cartao_credito", "15": "pix",
-      "1": "dinheiro", "7": "boleto", "5": "transferencia", "6": "transferencia",
+    // Status mapping
+    const statusMap: Record<number, string> = {
+      1: "agendado", 2: "confirmado", 3: "atendido", 4: "em_espera",
+      5: "em_atendimento", 6: "faltou", 7: "cancelado_paciente",
+      11: "cancelado", 16: "cancelado", 22: "agendado",
     };
 
-    // Build batch of records for upsert
+    // ─── Step 4: Build upsert records ───
     const upsertBatch: any[] = [];
+    const newPatients: Map<string, string> = new Map(); // feegow_id → name placeholder
 
-    for (const sale of sales) {
+    for (const appt of appointments) {
       stats.processados++;
 
-      const feegowId = String(sale.sale_id || sale.agendamento_id || sale.schedule_id || sale.id || "");
-      if (!feegowId) {
+      const feegowId = String(appt.agendamento_id || appt.id || "");
+      if (!feegowId || feegowId === "0") {
         stats.ignorados++;
         continue;
       }
 
-      const profId = sale.professional_id || sale.profissional_id;
-      const insId = sale.insurance_id || sale.convenio_id;
-      const patId = sale.patient_id || sale.paciente_id;
+      const profId = appt.profissional_id || appt.professional_id;
+      const convId = appt.convenio_id || appt.insurance_id;
+      const patId = appt.paciente_id || appt.patient_id;
 
-      const pmId = String(sale.payment_method || sale.forma_pagamento_id || "");
-      const formaPagamento = pmMap[pmId] || sale.payment_method_name || sale.forma_pagamento || null;
-
-      // Status presença
-      let statusPresenca: string | null = null;
-      const statusId = sale.status_id || sale.status;
-      if (statusId) {
-        const sid = Number(statusId);
-        if (sid === 3) statusPresenca = "atendido";
-        else if (sid === 6) statusPresenca = "faltou";
-        else if ([11, 16].includes(sid)) statusPresenca = "cancelado";
-        else statusPresenca = "confirmado";
-      }
-
-      // Parse date
+      // Parse date (DD-MM-YYYY → YYYY-MM-DD)
       let dataCompetencia = dateStart;
-      const rawDate = sale.date || sale.data;
+      const rawDate = appt.data || appt.date;
       if (rawDate) {
-        if (rawDate.includes("-") && rawDate.length === 10) {
+        if (rawDate.includes("-")) {
           const parts = rawDate.split("-");
-          dataCompetencia = parts[0].length === 4 ? rawDate : `${parts[2]}-${parts[1]}-${parts[0]}`;
+          if (parts[0].length === 2) {
+            // DD-MM-YYYY
+            dataCompetencia = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          } else {
+            dataCompetencia = rawDate;
+          }
         }
       }
 
-      const valor = Number(sale.total_value || sale.value || sale.valor || 0);
+      // Get financial value - default to 0 if null/undefined
+      const rawValor = appt.valor ?? appt.value ?? appt.valor_total_agendamento ?? 0;
+      const valor = Number(rawValor) || 0;
+
+      // Status
+      const statusId = Number(appt.status_id || appt.status || 0);
+      const statusPresenca = statusMap[statusId] || "agendado";
+
+      // Auto-register patients not in our lookup
+      if (patId && !lookups.pacientes.has(String(patId))) {
+        newPatients.set(String(patId), appt.paciente_nome || appt.patient_name || "Paciente Feegow");
+      }
+
+      // Procedure info
+      const procedimentos = appt.procedimentos || appt.procedures || [];
+      const procedimentoNome = procedimentos.length > 0
+        ? (procedimentos[0].nome || procedimentos[0].name || `Proc#${procedimentos[0].procedimentoID || procedimentos[0].procedure_id || ""}`)
+        : null;
 
       upsertBatch.push({
         clinica_id: clinicaId,
         feegow_id: feegowId,
-        invoice_id: sale.invoice_id ? String(sale.invoice_id) : null,
-        origem: fonte === "financial/list-sales" ? "feegow_sales" : "feegow_appoints",
+        invoice_id: null, // appoints don't have invoice_id
+        origem: "feegow_appoints",
         data_competencia: dataCompetencia,
         valor_bruto: valor,
-        descricao: sale.procedure_name || sale.procedimento_nome || sale.notes || sale.notas || null,
-        procedimento: sale.procedure_name || sale.procedimento_nome || null,
-        especialidade: sale.specialty_name || sale.especialidade_nome || null,
+        descricao: procedimentoNome || appt.notas || appt.notes || null,
+        procedimento: procedimentoNome,
+        especialidade: appt.especialidade_nome || null,
         medico_id: profId ? (lookups.medicos.get(String(profId)) || null) : null,
-        convenio_id: insId ? (lookups.convenios.get(String(insId)) || null) : null,
+        convenio_id: convId ? (lookups.convenios.get(String(convId)) || null) : null,
         paciente_id: patId ? (lookups.pacientes.get(String(patId)) || null) : null,
-        forma_pagamento: formaPagamento,
-        forma_pagamento_enum: fpEnumMap[pmId] || null,
+        forma_pagamento: null, // appoints don't have payment info
+        forma_pagamento_enum: null,
         status_presenca: statusPresenca,
-        parcelas: sale.installments ? Number(sale.installments) : 1,
-        quantidade: sale.quantity ? Number(sale.quantity) : 1,
+        parcelas: 1,
+        quantidade: procedimentos.length || 1,
       });
     }
 
-    // Upsert in batches of 100 for reliability
+    // ─── Step 4b: Also process list-sales invoices that have financial data ───
+    // Create records from list-sales for invoices not covered by appoints
+    for (const [invoiceId, sale] of salesMap) {
+      // Parse timestamp to date
+      let dataComp = dateStart;
+      if (sale.timestamp) {
+        const datePart = sale.timestamp.split(" ")[0]; // "2026-01-02 13:58:17" → "2026-01-02"
+        if (datePart) dataComp = datePart;
+      }
+
+      upsertBatch.push({
+        clinica_id: clinicaId,
+        feegow_id: `inv_${invoiceId}`,
+        invoice_id: String(invoiceId),
+        origem: "feegow_sales",
+        data_competencia: dataComp,
+        valor_bruto: sale.amount,
+        descricao: `Invoice #${invoiceId}`,
+        procedimento: null,
+        especialidade: null,
+        medico_id: null,
+        convenio_id: null,
+        paciente_id: null,
+        forma_pagamento: null,
+        forma_pagamento_enum: null,
+        status_presenca: null,
+        parcelas: 1,
+        quantidade: 1,
+      });
+      stats.processados++;
+    }
+
+    // ─── Step 5: Auto-create missing patients ───
+    if (newPatients.size > 0) {
+      const patBatch = Array.from(newPatients.entries()).map(([fid, nome]) => ({
+        clinica_id: clinicaId,
+        feegow_id: fid,
+        nome,
+      }));
+      const { data: created } = await supabase
+        .from("pacientes")
+        .upsert(patBatch, { onConflict: "clinica_id,feegow_id" })
+        .select("id, feegow_id");
+      if (created) {
+        for (const p of created) {
+          if (p.feegow_id) lookups.pacientes.set(p.feegow_id, p.id);
+        }
+        // Update paciente_id in batch
+        for (const rec of upsertBatch) {
+          if (!rec.paciente_id && rec.origem === "feegow_appoints") {
+            // Try to find the patient from the appt data
+            const appt = appointments.find(a => String(a.agendamento_id || a.id) === rec.feegow_id);
+            if (appt) {
+              const patFid = String(appt.paciente_id || appt.patient_id || "");
+              if (patFid && lookups.pacientes.has(patFid)) {
+                rec.paciente_id = lookups.pacientes.get(patFid);
+              }
+            }
+          }
+        }
+      }
+      stats.detalhes.patients_auto_created = newPatients.size;
+    }
+
+    // ─── Step 6: Upsert in batches of 100 ───
     const BATCH_SIZE = 100;
     for (let i = 0; i < upsertBatch.length; i += BATCH_SIZE) {
       const batch = upsertBatch.slice(i, i + BATCH_SIZE);
       const { data: upserted, error } = await supabase
         .from("transacoes_vendas")
-        .upsert(batch, {
-          onConflict: "clinica_id,feegow_id",
-          ignoreDuplicates: false,
-        })
+        .upsert(batch, { onConflict: "clinica_id,feegow_id", ignoreDuplicates: false })
         .select("id");
 
       if (error) {
         stats.erros.push(`Upsert batch ${i / BATCH_SIZE + 1}: ${error.message}`);
-        // Fallback: try one-by-one for this batch
+        // Fallback one-by-one
         for (const record of batch) {
           const { data: existing } = await supabase
             .from("transacoes_vendas")
@@ -342,33 +410,30 @@ async function syncSales(
             .eq("clinica_id", clinicaId)
             .eq("feegow_id", record.feegow_id)
             .maybeSingle();
-
           if (existing) {
-            const { error: upErr } = await supabase
-              .from("transacoes_vendas")
-              .update(record)
-              .eq("id", existing.id);
+            const { error: upErr } = await supabase.from("transacoes_vendas").update(record).eq("id", existing.id);
             if (upErr) stats.erros.push(`Update ${record.feegow_id}: ${upErr.message}`);
             else stats.atualizados++;
           } else {
-            const { error: insErr } = await supabase
-              .from("transacoes_vendas")
-              .insert(record);
+            const { error: insErr } = await supabase.from("transacoes_vendas").insert(record);
             if (insErr) stats.erros.push(`Insert ${record.feegow_id}: ${insErr.message}`);
             else stats.criados++;
           }
         }
       } else {
-        // Count created vs updated (upsert doesn't distinguish, so we estimate)
-        // We'll count the total successfully processed
         stats.atualizados += (upserted?.length || batch.length);
       }
     }
 
-    await finishLog(supabase, logId, stats.erros.length > 0 ? "erro_parcial" : "sucesso", {
-      ...stats,
-      detalhes: { dateStart, dateEnd, unidadeId, fonte, total: sales.length, batches: Math.ceil(upsertBatch.length / BATCH_SIZE) },
-    });
+    stats.detalhes = {
+      ...stats.detalhes,
+      dateStart, dateEnd, unidadeId,
+      total_appoints: appointments.length,
+      total_invoices: salesMap.size,
+      total_batch: upsertBatch.length,
+    };
+
+    await finishLog(supabase, logId, stats.erros.length > 0 ? "erro_parcial" : "sucesso", stats);
   } catch (e: any) {
     stats.erros.push(e.message);
     await finishLog(supabase, logId, "erro", stats);
@@ -417,10 +482,11 @@ Deno.serve(async (req) => {
 
     const response: Record<string, any> = { success: true };
 
-    // ── Metadata sync ──
+    // ── Metadata sync (skip patients by default to avoid timeout) ──
     if (action === "full" || action === "metadata") {
-      const logId = await createLog(supabase, clinicaId, "feegow_metadata", "sync_metadata", "professional+salas+insurance+patient");
-      const metaResult = await syncMetadata(supabase, clinicaId, feegowHeaders);
+      const includePatients = body.include_patients === true;
+      const logId = await createLog(supabase, clinicaId, "feegow_metadata", "sync_metadata", "professional+salas+insurance");
+      const metaResult = await syncMetadata(supabase, clinicaId, feegowHeaders, includePatients);
       await finishLog(supabase, logId, metaResult.errors.length > 0 ? "erro_parcial" : "sucesso", {
         processados: metaResult.medicos + metaResult.salas + metaResult.convenios + metaResult.pacientes,
         criados: metaResult.medicos + metaResult.salas + metaResult.convenios + metaResult.pacientes,
@@ -430,12 +496,42 @@ Deno.serve(async (req) => {
       response.metadata = metaResult;
     }
 
-    // ── Sales sync ──
+    // ── Sales sync (weekly chunks to avoid timeout) ──
     if (action === "full" || action === "sales") {
       const end = dateEnd || new Date().toISOString().split("T")[0];
       const start = dateStart || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
-      const salesResult = await syncSales(supabase, clinicaId, feegowHeaders, start, end, unidadeId);
-      response.sales = salesResult;
+
+      // Split into weekly chunks to avoid timeout
+      const chunks: { start: string; end: string }[] = [];
+      let chunkStart = new Date(start);
+      const endDate = new Date(end);
+      while (chunkStart <= endDate) {
+        const chunkEnd = new Date(chunkStart);
+        chunkEnd.setDate(chunkEnd.getDate() + 6);
+        if (chunkEnd > endDate) chunkEnd.setTime(endDate.getTime());
+        chunks.push({
+          start: chunkStart.toISOString().split("T")[0],
+          end: chunkEnd.toISOString().split("T")[0],
+        });
+        chunkStart = new Date(chunkEnd);
+        chunkStart.setDate(chunkStart.getDate() + 1);
+      }
+
+      const allResults: any[] = [];
+      const totalStats = { processados: 0, criados: 0, atualizados: 0, ignorados: 0, erros: [] as string[], fonte: "" };
+
+      for (const chunk of chunks) {
+        const chunkResult = await syncSales(supabase, clinicaId, feegowHeaders, chunk.start, chunk.end, unidadeId);
+        allResults.push({ ...chunk, ...chunkResult });
+        totalStats.processados += chunkResult.processados;
+        totalStats.criados += chunkResult.criados;
+        totalStats.atualizados += chunkResult.atualizados;
+        totalStats.ignorados += chunkResult.ignorados;
+        totalStats.erros.push(...chunkResult.erros);
+        if (chunkResult.fonte) totalStats.fonte = chunkResult.fonte;
+      }
+
+      response.sales = { ...totalStats, chunks: allResults };
     }
 
     // Update integration status
