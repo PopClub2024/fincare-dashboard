@@ -194,8 +194,8 @@ export default function CustoFixo() {
       const mes = i + 1;
       const curr = currentYearHist.find(h => h.mes === mes);
       const prev = prevYearHist.find(h => h.mes === mes);
-      const realCF = curr ? curr.saidas_custos_fixos + curr.saidas_mao_obra : 0;
-      const realCFPrev = prev ? prev.saidas_custos_fixos + prev.saidas_mao_obra : 0;
+      const realCF = curr ? curr.saidas_custos_fixos : 0;
+      const realCFPrev = prev ? prev.saidas_custos_fixos : 0;
       return {
         mes: name,
         orcado: cfTotal,
@@ -393,15 +393,15 @@ export default function CustoFixo() {
                 <CardContent>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
+                    <PieChart>
                         <Pie
                           data={grupoSummary}
                           dataKey="total"
                           nameKey="grupo"
                           cx="50%"
-                          cy="50%"
-                          outerRadius={120}
-                          label={({ grupo, pct }) => `${grupo.substring(0, 12)}… ${pct.toFixed(0)}%`}
+                          cy="45%"
+                          outerRadius={90}
+                          label={({ pct }) => `${pct.toFixed(0)}%`}
                           labelLine={false}
                         >
                           {grupoSummary.map((_, i) => (
@@ -409,6 +409,13 @@ export default function CustoFixo() {
                           ))}
                         </Pie>
                         <RTooltip formatter={(v: number) => fmt(v)} />
+                        <Legend
+                          layout="horizontal"
+                          verticalAlign="bottom"
+                          align="center"
+                          wrapperStyle={{ fontSize: '11px', lineHeight: '18px', paddingTop: '8px' }}
+                          formatter={(value: string) => value.length > 20 ? value.substring(0, 20) + '…' : value}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
