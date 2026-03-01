@@ -528,6 +528,59 @@ export type Database = {
           },
         ]
       }
+      custo_fixo_itens: {
+        Row: {
+          ativo: boolean
+          clinica_id: string
+          codigo_pc: string | null
+          created_at: string
+          descricao: string
+          fonte_funcionarios: boolean
+          grupo: string
+          id: string
+          observacao: string | null
+          recorrencia: string
+          updated_at: string
+          valor_mensal: number
+        }
+        Insert: {
+          ativo?: boolean
+          clinica_id: string
+          codigo_pc?: string | null
+          created_at?: string
+          descricao: string
+          fonte_funcionarios?: boolean
+          grupo: string
+          id?: string
+          observacao?: string | null
+          recorrencia?: string
+          updated_at?: string
+          valor_mensal?: number
+        }
+        Update: {
+          ativo?: boolean
+          clinica_id?: string
+          codigo_pc?: string | null
+          created_at?: string
+          descricao?: string
+          fonte_funcionarios?: boolean
+          grupo?: string
+          id?: string
+          observacao?: string | null
+          recorrencia?: string
+          updated_at?: string
+          valor_mensal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custo_fixo_itens_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       despesas: {
         Row: {
           categoria: string
@@ -905,6 +958,89 @@ export type Database = {
             columns: ["rascunho_id"]
             isOneToOne: false
             referencedRelation: "precos_rascunho"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funcionarios: {
+        Row: {
+          ativo: boolean
+          auxilio_transporte: number
+          bolsa_mensal: number
+          cargo: string
+          clinica_id: string
+          created_at: string
+          decimo_terceiro_pct: number
+          diarias_semanais: number
+          ferias_pct: number
+          fgts_pct: number
+          id: string
+          insalubridade: number
+          inss_patronal_pct: number
+          nome: string
+          passagem_dia: number
+          salario_bruto: number
+          semanas_mes: number
+          tipo: Database["public"]["Enums"]["tipo_funcionario"]
+          updated_at: string
+          vale_transporte: number
+          valor_diaria: number
+          valor_mensal_prestador: number
+        }
+        Insert: {
+          ativo?: boolean
+          auxilio_transporte?: number
+          bolsa_mensal?: number
+          cargo: string
+          clinica_id: string
+          created_at?: string
+          decimo_terceiro_pct?: number
+          diarias_semanais?: number
+          ferias_pct?: number
+          fgts_pct?: number
+          id?: string
+          insalubridade?: number
+          inss_patronal_pct?: number
+          nome: string
+          passagem_dia?: number
+          salario_bruto?: number
+          semanas_mes?: number
+          tipo?: Database["public"]["Enums"]["tipo_funcionario"]
+          updated_at?: string
+          vale_transporte?: number
+          valor_diaria?: number
+          valor_mensal_prestador?: number
+        }
+        Update: {
+          ativo?: boolean
+          auxilio_transporte?: number
+          bolsa_mensal?: number
+          cargo?: string
+          clinica_id?: string
+          created_at?: string
+          decimo_terceiro_pct?: number
+          diarias_semanais?: number
+          ferias_pct?: number
+          fgts_pct?: number
+          id?: string
+          insalubridade?: number
+          inss_patronal_pct?: number
+          nome?: string
+          passagem_dia?: number
+          salario_bruto?: number
+          semanas_mes?: number
+          tipo?: Database["public"]["Enums"]["tipo_funcionario"]
+          updated_at?: string
+          vale_transporte?: number
+          valor_diaria?: number
+          valor_mensal_prestador?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funcionarios_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
             referencedColumns: ["id"]
           },
         ]
@@ -2236,6 +2372,7 @@ export type Database = {
       tipo_despesa: "fixa" | "variavel"
       tipo_destino_regra: "divida" | "imposto" | "conta_pagar"
       tipo_divida: "curto_prazo" | "longo_prazo"
+      tipo_funcionario: "clt" | "diarista" | "estagiario" | "prestador"
       tipo_imposto: "simples" | "fgts" | "inss" | "iss"
       tipo_pagador: "particular" | "convenio"
       tipo_procedimento: "consulta" | "exame" | "procedimento" | "servico"
@@ -2415,6 +2552,7 @@ export const Constants = {
       tipo_despesa: ["fixa", "variavel"],
       tipo_destino_regra: ["divida", "imposto", "conta_pagar"],
       tipo_divida: ["curto_prazo", "longo_prazo"],
+      tipo_funcionario: ["clt", "diarista", "estagiario", "prestador"],
       tipo_imposto: ["simples", "fgts", "inss", "iss"],
       tipo_pagador: ["particular", "convenio"],
       tipo_procedimento: ["consulta", "exame", "procedimento", "servico"],
