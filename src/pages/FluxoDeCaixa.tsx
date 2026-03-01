@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -15,9 +16,11 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import EditRecordDialog, { FieldDef } from "@/components/admin/EditRecordDialog";
 import { toast } from "sonner";
 import {
-  DollarSign, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, CalendarDays, ArrowLeftRight,
+  DollarSign, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, CalendarDays, ArrowLeftRight, Pencil,
 } from "lucide-react";
 
 const fmt = (v: number) =>
@@ -78,20 +81,11 @@ function historicoToCaixaData(rows: any[]): CaixaData {
       mes: r.mes,
       ano: r.ano,
       mes_label: `${MONTH_NAMES[r.mes - 1]}/${String(r.ano).slice(2)}`,
-      entradas_op,
-      recuperacoes,
-      mao_obra,
-      custos_var,
-      custos_fix,
-      marketing,
-      impostos,
-      emprestimos,
-      aporte,
-      retirada,
+      entradas_op, recuperacoes, mao_obra, custos_var, custos_fix, marketing,
+      impostos, emprestimos, aporte, retirada,
       saldo_op: Number(r.saldo_operacional) || 0,
       saldo_final: Number(r.saldo_final) || 0,
-      total_entradas,
-      total_saidas,
+      total_entradas, total_saidas,
     };
   });
 
@@ -123,8 +117,24 @@ async function fetchCaixaYear(clinicaId: string, year: number): Promise<CaixaDat
   return historicoToCaixaData(histRows);
 }
 
+const CAIXA_HIST_FIELDS: FieldDef[] = [
+  { key: "entradas_operacionais", label: "Entradas Operacionais", type: "number" },
+  { key: "recuperacoes_glosa", label: "Recuperações de Glosa", type: "number" },
+  { key: "saidas_mao_obra", label: "Mão de Obra", type: "number" },
+  { key: "saidas_custos_variaveis", label: "Custos Variáveis", type: "number" },
+  { key: "saidas_custos_fixos", label: "Custos Fixos", type: "number" },
+  { key: "saidas_marketing", label: "Marketing", type: "number" },
+  { key: "saidas_impostos", label: "Impostos", type: "number" },
+  { key: "saidas_emprestimos", label: "Empréstimos", type: "number" },
+  { key: "aporte_nao_operacional", label: "Aporte", type: "number" },
+  { key: "retirada_nao_operacional", label: "Retirada", type: "number" },
+  { key: "saldo_operacional", label: "Saldo Operacional", type: "number" },
+  { key: "saldo_final", label: "Saldo Final", type: "number" },
+];
+
 export default function FluxoDeCaixa() {
   const { clinicaId } = useAuth();
+  const isAdmin = useIsAdmin();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [compareYear, setCompareYear] = useState(currentYear - 1);
@@ -132,20 +142,32 @@ export default function FluxoDeCaixa() {
   const [compareData, setCompareData] = useState<CaixaData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Admin edit state
+  const [histRecords, setHistRecords] = useState<any[]>([]);
+  const [editingRecord, setEditingRecord] = useState<any>(null);
+
+  const fetchData = () => {
     if (!clinicaId) return;
     setLoading(true);
-    Promise.all([
+    const promises: Promise<any>[] = [
       fetchCaixaYear(clinicaId, year),
       fetchCaixaYear(clinicaId, compareYear),
-    ])
-      .then(([res1, res2]) => {
+    ];
+    Promise.all(promises)
+      .then(([res1, res2, hist]) => {
         setData(res1);
         setCompareData(res2);
+        if (hist) setHistRecords(hist);
       })
       .catch((e: any) => toast.error("Erro ao carregar fluxo de caixa: " + e.message))
       .finally(() => setLoading(false));
-  }, [clinicaId, year, compareYear]);
+  };
+
+  useEffect(() => { fetchData(); }, [clinicaId, year, compareYear]);
+
+  const getHistRecordForMonth = (mes: number) => {
+    return histRecords.find((r) => r.mes === mes);
+  };
 
   // Monthly comparison for YoY
   const monthlyComparison = useMemo(() => {
@@ -341,14 +363,34 @@ export default function FluxoDeCaixa() {
 
             {/* Table */}
             <Card className="border-0 shadow-md">
-              <CardHeader><CardTitle className="text-lg">Detalhamento Mensal — {year}</CardTitle></CardHeader>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Detalhamento Mensal — {year}</CardTitle>
+                  {isAdmin && histRecords.length > 0 && (
+                    <Badge variant="outline" className="gap-1 text-xs"><Pencil className="h-3 w-3" />Clique no mês para editar</Badge>
+                  )}
+                </div>
+              </CardHeader>
               <CardContent className="p-0 overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="sticky left-0 bg-card z-10 min-w-[220px]">Categoria</TableHead>
                       {data?.mensal.map((m) => (
-                        <TableHead key={`${m.ano}-${m.mes}`} className="text-right min-w-[110px]">{m.mes_label}</TableHead>
+                        <TableHead key={`${m.ano}-${m.mes}`} className="text-right min-w-[110px]">
+                          <div className="flex items-center justify-end gap-1">
+                            {m.mes_label}
+                            {isAdmin && getHistRecordForMonth(m.mes) && (
+                              <button
+                                onClick={() => setEditingRecord(getHistRecordForMonth(m.mes))}
+                                className="p-0.5 rounded hover:bg-accent"
+                                title="Editar mês"
+                              >
+                                <Pencil className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                              </button>
+                            )}
+                          </div>
+                        </TableHead>
                       ))}
                       <TableHead className="text-right min-w-[120px] font-bold">Total</TableHead>
                     </TableRow>
@@ -541,6 +583,20 @@ export default function FluxoDeCaixa() {
           <p className="text-sm text-muted-foreground p-4">Sem dados de fluxo de caixa disponíveis para {year}.</p>
         )}
       </div>
+
+      {/* Admin Edit Dialog */}
+      {editingRecord && (
+        <EditRecordDialog
+          open={!!editingRecord}
+          onOpenChange={(open) => !open && setEditingRecord(null)}
+          title={`Caixa — ${MONTH_NAMES[editingRecord.mes - 1]}/${editingRecord.ano}`}
+          table="caixa_historico_mensal"
+          recordId={editingRecord.id}
+          fields={CAIXA_HIST_FIELDS}
+          initialValues={editingRecord}
+          onSaved={fetchData}
+        />
+      )}
     </DashboardLayout>
   );
 }
