@@ -2,3 +2,9 @@ project_id = "bvezzatavermwhdlljyy"
 
 [functions.sync-feegow]
 verify_jwt = false
+
+[functions.process-comprovante]
+verify_jwt = false
+
+[functions.import-ofx]
+verify_jwt = false

@@ -155,6 +155,63 @@ export type Database = {
         }
         Relationships: []
       }
+      comprovantes: {
+        Row: {
+          arquivo_nome: string | null
+          arquivo_url: string
+          clinica_id: string
+          created_at: string
+          dados_extraidos: Json | null
+          erro_processamento: string | null
+          id: string
+          lancamento_id: string | null
+          status: Database["public"]["Enums"]["status_comprovante"]
+          tipo_arquivo: string | null
+          updated_at: string
+        }
+        Insert: {
+          arquivo_nome?: string | null
+          arquivo_url: string
+          clinica_id: string
+          created_at?: string
+          dados_extraidos?: Json | null
+          erro_processamento?: string | null
+          id?: string
+          lancamento_id?: string | null
+          status?: Database["public"]["Enums"]["status_comprovante"]
+          tipo_arquivo?: string | null
+          updated_at?: string
+        }
+        Update: {
+          arquivo_nome?: string | null
+          arquivo_url?: string
+          clinica_id?: string
+          created_at?: string
+          dados_extraidos?: Json | null
+          erro_processamento?: string | null
+          id?: string
+          lancamento_id?: string | null
+          status?: Database["public"]["Enums"]["status_comprovante"]
+          tipo_arquivo?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comprovantes_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comprovantes_lancamento_id_fkey"
+            columns: ["lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "contas_pagar_lancamentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conciliacoes: {
         Row: {
           clinica_id: string
@@ -259,6 +316,102 @@ export type Database = {
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contas_pagar_lancamentos: {
+        Row: {
+          banco_referencia: string | null
+          canal_pagamento: Database["public"]["Enums"]["canal_pagamento"] | null
+          clinica_id: string
+          comprovante_id: string | null
+          created_at: string
+          data_competencia: string
+          data_pagamento: string | null
+          data_vencimento: string | null
+          descricao: string | null
+          forma_pagamento: Database["public"]["Enums"]["forma_pagamento"] | null
+          fornecedor: string | null
+          id: string
+          observacao: string | null
+          ofx_transaction_id: string | null
+          plano_contas_id: string | null
+          status: Database["public"]["Enums"]["status_lancamento_cp"]
+          tipo_despesa: Database["public"]["Enums"]["tipo_despesa"]
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          banco_referencia?: string | null
+          canal_pagamento?:
+            | Database["public"]["Enums"]["canal_pagamento"]
+            | null
+          clinica_id: string
+          comprovante_id?: string | null
+          created_at?: string
+          data_competencia: string
+          data_pagamento?: string | null
+          data_vencimento?: string | null
+          descricao?: string | null
+          forma_pagamento?:
+            | Database["public"]["Enums"]["forma_pagamento"]
+            | null
+          fornecedor?: string | null
+          id?: string
+          observacao?: string | null
+          ofx_transaction_id?: string | null
+          plano_contas_id?: string | null
+          status?: Database["public"]["Enums"]["status_lancamento_cp"]
+          tipo_despesa?: Database["public"]["Enums"]["tipo_despesa"]
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          banco_referencia?: string | null
+          canal_pagamento?:
+            | Database["public"]["Enums"]["canal_pagamento"]
+            | null
+          clinica_id?: string
+          comprovante_id?: string | null
+          created_at?: string
+          data_competencia?: string
+          data_pagamento?: string | null
+          data_vencimento?: string | null
+          descricao?: string | null
+          forma_pagamento?:
+            | Database["public"]["Enums"]["forma_pagamento"]
+            | null
+          fornecedor?: string | null
+          id?: string
+          observacao?: string | null
+          ofx_transaction_id?: string | null
+          plano_contas_id?: string | null
+          status?: Database["public"]["Enums"]["status_lancamento_cp"]
+          tipo_despesa?: Database["public"]["Enums"]["tipo_despesa"]
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contas_pagar_lancamentos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_lancamentos_plano_contas_id_fkey"
+            columns: ["plano_contas_id"]
+            isOneToOne: false
+            referencedRelation: "plano_contas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_lancamento_comprovante"
+            columns: ["comprovante_id"]
+            isOneToOne: false
+            referencedRelation: "comprovantes"
             referencedColumns: ["id"]
           },
         ]
@@ -624,6 +777,53 @@ export type Database = {
           },
         ]
       }
+      plano_contas: {
+        Row: {
+          ativo: boolean
+          categoria: string
+          clinica_id: string
+          codigo: number
+          codigo_estruturado: string
+          created_at: string
+          descricao: string
+          id: string
+          indicador: Database["public"]["Enums"]["indicador_plano"]
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          categoria: string
+          clinica_id: string
+          codigo: number
+          codigo_estruturado: string
+          created_at?: string
+          descricao: string
+          id?: string
+          indicador?: Database["public"]["Enums"]["indicador_plano"]
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string
+          clinica_id?: string
+          codigo?: number
+          codigo_estruturado?: string
+          created_at?: string
+          descricao?: string
+          id?: string
+          indicador?: Database["public"]["Enums"]["indicador_plano"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plano_contas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       salas: {
         Row: {
           ativo: boolean
@@ -768,6 +968,8 @@ export type Database = {
       }
       transacoes_vendas: {
         Row: {
+          banco_referencia: string | null
+          canal_pagamento: Database["public"]["Enums"]["canal_pagamento"] | null
           clinica_id: string
           convenio_id: string | null
           created_at: string
@@ -777,13 +979,21 @@ export type Database = {
           data_prevista_recebimento: string | null
           desconto: number
           descricao: string | null
+          especialidade: string | null
           feegow_id: string | null
           forma_pagamento: string | null
+          forma_pagamento_enum:
+            | Database["public"]["Enums"]["forma_pagamento"]
+            | null
           id: string
           impostos_taxas: number
+          linha_receita: Database["public"]["Enums"]["linha_receita"] | null
           medico_id: string | null
           observacao: string | null
           paciente_id: string | null
+          parcela_atual: number | null
+          parcelas: number | null
+          procedimento: string | null
           quantidade: number
           sala_id: string | null
           status_conciliacao: Database["public"]["Enums"]["status_conciliacao"]
@@ -794,6 +1004,10 @@ export type Database = {
           valor_liquido: number | null
         }
         Insert: {
+          banco_referencia?: string | null
+          canal_pagamento?:
+            | Database["public"]["Enums"]["canal_pagamento"]
+            | null
           clinica_id: string
           convenio_id?: string | null
           created_at?: string
@@ -803,13 +1017,21 @@ export type Database = {
           data_prevista_recebimento?: string | null
           desconto?: number
           descricao?: string | null
+          especialidade?: string | null
           feegow_id?: string | null
           forma_pagamento?: string | null
+          forma_pagamento_enum?:
+            | Database["public"]["Enums"]["forma_pagamento"]
+            | null
           id?: string
           impostos_taxas?: number
+          linha_receita?: Database["public"]["Enums"]["linha_receita"] | null
           medico_id?: string | null
           observacao?: string | null
           paciente_id?: string | null
+          parcela_atual?: number | null
+          parcelas?: number | null
+          procedimento?: string | null
           quantidade?: number
           sala_id?: string | null
           status_conciliacao?: Database["public"]["Enums"]["status_conciliacao"]
@@ -822,6 +1044,10 @@ export type Database = {
           valor_liquido?: number | null
         }
         Update: {
+          banco_referencia?: string | null
+          canal_pagamento?:
+            | Database["public"]["Enums"]["canal_pagamento"]
+            | null
           clinica_id?: string
           convenio_id?: string | null
           created_at?: string
@@ -831,13 +1057,21 @@ export type Database = {
           data_prevista_recebimento?: string | null
           desconto?: number
           descricao?: string | null
+          especialidade?: string | null
           feegow_id?: string | null
           forma_pagamento?: string | null
+          forma_pagamento_enum?:
+            | Database["public"]["Enums"]["forma_pagamento"]
+            | null
           id?: string
           impostos_taxas?: number
+          linha_receita?: Database["public"]["Enums"]["linha_receita"] | null
           medico_id?: string | null
           observacao?: string | null
           paciente_id?: string | null
+          parcela_atual?: number | null
+          parcelas?: number | null
+          procedimento?: string | null
           quantidade?: number
           sala_id?: string | null
           status_conciliacao?: Database["public"]["Enums"]["status_conciliacao"]
@@ -968,12 +1202,40 @@ export type Database = {
         }
         Returns: string
       }
+      seed_plano_contas: { Args: { _clinica_id: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "gestor" | "operador_caixa" | "visualizador"
+      canal_pagamento:
+        | "qrcode"
+        | "chave_celular"
+        | "chave_cnpj"
+        | "maquininha"
+        | "boleto"
+        | "deposito"
+        | "outro"
+      forma_pagamento:
+        | "pix"
+        | "dinheiro"
+        | "convenio_nf"
+        | "cartao_credito"
+        | "cartao_debito"
+      indicador_plano: "credito" | "debito"
+      linha_receita:
+        | "prestacao_servicos"
+        | "consulta"
+        | "exame"
+        | "procedimento"
+        | "produto"
+      status_comprovante: "pendente" | "processado" | "erro" | "rejeitado"
       status_conciliacao: "pendente" | "conciliado" | "divergente"
       status_conta: "pendente" | "pago" | "vencido" | "cancelado"
       status_integracao: "ativo" | "inativo" | "erro"
+      status_lancamento_cp:
+        | "a_classificar"
+        | "classificado"
+        | "pago"
+        | "cancelado"
       status_presenca: "confirmado" | "atendido" | "faltou" | "cancelado"
       status_recebimento: "a_receber" | "recebido" | "inadimplente" | "glosado"
       status_sync: "em_andamento" | "sucesso" | "erro"
@@ -1107,9 +1369,40 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "gestor", "operador_caixa", "visualizador"],
+      canal_pagamento: [
+        "qrcode",
+        "chave_celular",
+        "chave_cnpj",
+        "maquininha",
+        "boleto",
+        "deposito",
+        "outro",
+      ],
+      forma_pagamento: [
+        "pix",
+        "dinheiro",
+        "convenio_nf",
+        "cartao_credito",
+        "cartao_debito",
+      ],
+      indicador_plano: ["credito", "debito"],
+      linha_receita: [
+        "prestacao_servicos",
+        "consulta",
+        "exame",
+        "procedimento",
+        "produto",
+      ],
+      status_comprovante: ["pendente", "processado", "erro", "rejeitado"],
       status_conciliacao: ["pendente", "conciliado", "divergente"],
       status_conta: ["pendente", "pago", "vencido", "cancelado"],
       status_integracao: ["ativo", "inativo", "erro"],
+      status_lancamento_cp: [
+        "a_classificar",
+        "classificado",
+        "pago",
+        "cancelado",
+      ],
       status_presenca: ["confirmado", "atendido", "faltou", "cancelado"],
       status_recebimento: ["a_receber", "recebido", "inadimplente", "glosado"],
       status_sync: ["em_andamento", "sucesso", "erro"],

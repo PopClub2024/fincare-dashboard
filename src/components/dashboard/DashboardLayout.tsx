@@ -2,13 +2,14 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Receipt, Settings, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, Receipt, FileText, Settings, LogOut, Menu, X } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "Caixa", icon: Receipt, path: "/caixa" },
+  { label: "Contas a Pagar", icon: FileText, path: "/contas-a-pagar" },
   { label: "Configurações", icon: Settings, path: "/configuracoes" },
 ];
 
