@@ -21,6 +21,7 @@ import Impostos from "./pages/Impostos";
 import Precificacao from "./pages/Precificacao";
 import CustoFixo from "./pages/CustoFixo";
 import Conciliacao from "./pages/Conciliacao";
+import Producao from "./pages/Producao";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/dashboard" element={<ProtectedRoute><DashboardCFO /></ProtectedRoute>} />
             <Route path="/dre" element={<ProtectedRoute><DRE /></ProtectedRoute>} />
+            <Route path="/producao" element={<ProtectedRoute><Producao /></ProtectedRoute>} />
             <Route path="/fluxo-de-caixa" element={<ProtectedRoute><FluxoDeCaixa /></ProtectedRoute>} />
             <Route path="/caixa" element={<ProtectedRoute><Caixa /></ProtectedRoute>} />
             <Route path="/contas-a-receber" element={<ProtectedRoute><ContasAReceber /></ProtectedRoute>} />
