@@ -119,6 +119,74 @@ export type Database = {
           },
         ]
       }
+      caixa_historico_mensal: {
+        Row: {
+          ano: number
+          aporte_nao_operacional: number
+          clinica_id: string
+          created_at: string
+          entradas_operacionais: number
+          id: string
+          mes: number
+          recuperacoes_glosa: number
+          retirada_nao_operacional: number
+          saidas_custos_fixos: number
+          saidas_custos_variaveis: number
+          saidas_emprestimos: number
+          saidas_impostos: number
+          saidas_mao_obra: number
+          saidas_marketing: number
+          saldo_final: number
+          saldo_operacional: number
+        }
+        Insert: {
+          ano: number
+          aporte_nao_operacional?: number
+          clinica_id: string
+          created_at?: string
+          entradas_operacionais?: number
+          id?: string
+          mes: number
+          recuperacoes_glosa?: number
+          retirada_nao_operacional?: number
+          saidas_custos_fixos?: number
+          saidas_custos_variaveis?: number
+          saidas_emprestimos?: number
+          saidas_impostos?: number
+          saidas_mao_obra?: number
+          saidas_marketing?: number
+          saldo_final?: number
+          saldo_operacional?: number
+        }
+        Update: {
+          ano?: number
+          aporte_nao_operacional?: number
+          clinica_id?: string
+          created_at?: string
+          entradas_operacionais?: number
+          id?: string
+          mes?: number
+          recuperacoes_glosa?: number
+          retirada_nao_operacional?: number
+          saidas_custos_fixos?: number
+          saidas_custos_variaveis?: number
+          saidas_emprestimos?: number
+          saidas_impostos?: number
+          saidas_mao_obra?: number
+          saidas_marketing?: number
+          saldo_final?: number
+          saldo_operacional?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "caixa_historico_mensal_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinicas: {
         Row: {
           cnpj: string | null
@@ -928,6 +996,47 @@ export type Database = {
           },
         ]
       }
+      prazos_recebimento: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          descricao: string | null
+          id: string
+          prazo_dias: number
+          referencia: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          prazo_dias?: number
+          referencia: string
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          prazo_dias?: number
+          referencia?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prazos_recebimento_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       receita_canal_mensal: {
         Row: {
           ano: number
@@ -1377,6 +1486,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_cash_kpis: {
+        Args: { _end_date: string; _filtros?: Json; _start_date: string }
+        Returns: Json
+      }
       get_dre: {
         Args: { _end_date: string; _filtros?: Json; _start_date: string }
         Returns: Json
