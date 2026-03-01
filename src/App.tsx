@@ -10,6 +10,7 @@ import Signup from "./pages/Signup";
 import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import DashboardCFO from "./pages/DashboardCFO";
+import CfoAssistente from "./pages/CfoAssistente";
 import DRE from "./pages/DRE";
 import Caixa from "./pages/Caixa";
 import FluxoDeCaixa from "./pages/FluxoDeCaixa";
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="/importacoes/inbox" element={<ProtectedRoute><ImportInbox /></ProtectedRoute>} />
             <Route path="/debug/operacao" element={<ProtectedRoute><DebugOperacao /></ProtectedRoute>} />
             <Route path="/convenios" element={<ProtectedRoute><Convenios /></ProtectedRoute>} />
+            <Route path="/cfo-assistente" element={<ProtectedRoute><CfoAssistente /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

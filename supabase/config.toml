@@ -32,3 +32,9 @@ verify_jwt = false
 
 [functions.automation-webhook]
 verify_jwt = false
+
+[functions.ai-cfo-analyze]
+verify_jwt = false
+
+[functions.autopilot-run]
+verify_jwt = false
