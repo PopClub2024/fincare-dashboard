@@ -46,7 +46,8 @@ const navSections: NavSection[] = [
   {
     title: "Operacional",
     items: [
-      { label: "Conciliação", icon: GitCompare, path: "/conciliacao" },
+      { label: "Conciliação Receitas", icon: GitCompare, path: "/conciliacao" },
+      { label: "Conciliação Despesas", icon: GitCompare, path: "/conciliacao-despesas" },
       { label: "Precificação", icon: Tag, path: "/precificacao" },
       { label: "Custo Fixo", icon: Building2, path: "/custo-fixo" },
     ],

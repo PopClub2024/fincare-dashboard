@@ -22,6 +22,7 @@ import Impostos from "./pages/Impostos";
 import Precificacao from "./pages/Precificacao";
 import CustoFixo from "./pages/CustoFixo";
 import Conciliacao from "./pages/Conciliacao";
+import ConciliacaoDespesas from "./pages/ConciliacaoDespesas";
 import Producao from "./pages/Producao";
 import FeegowIntegracao from "./pages/FeegowIntegracao";
 import Automacoes from "./pages/Automacoes";
@@ -57,6 +58,7 @@ const App = () => (
             <Route path="/precificacao" element={<ProtectedRoute><Precificacao /></ProtectedRoute>} />
             <Route path="/custo-fixo" element={<ProtectedRoute><CustoFixo /></ProtectedRoute>} />
             <Route path="/conciliacao" element={<ProtectedRoute><Conciliacao /></ProtectedRoute>} />
+            <Route path="/conciliacao-despesas" element={<ProtectedRoute><ConciliacaoDespesas /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="/integracoes/feegow" element={<ProtectedRoute><FeegowIntegracao /></ProtectedRoute>} />
             <Route path="/operacao/automacoes" element={<ProtectedRoute><Automacoes /></ProtectedRoute>} />

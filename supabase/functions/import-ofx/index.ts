@@ -55,6 +55,11 @@ function parseOFX(ofxContent: string) {
   return transactions;
 }
 
+// ─── Text normalization ─────────────────────────────────────────
+function normalizeText(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+}
+
 // ─── Helpers ────────────────────────────────────────────────────
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -194,6 +199,30 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
 
     for (const txn of transactions) {
+      // First, insert into transacoes_bancarias
+      const { data: bankTxn, error: bankErr } = await supabase
+        .from("transacoes_bancarias")
+        .insert({
+          clinica_id,
+          fitid: txn.fitid,
+          tipo: txn.amount > 0 ? "credito" : "debito",
+          valor: txn.amount,
+          data_transacao: txn.date,
+          descricao: [txn.name, txn.memo].filter(Boolean).join(" - "),
+          status: "importado",
+        })
+        .select("id")
+        .maybeSingle();
+
+      if (bankErr) {
+        // Likely duplicate fitid
+        if (bankErr.code === "23505") { skipped++; continue; }
+        errors.push(`FITID ${txn.fitid}: ${bankErr.message}`);
+        continue;
+      }
+
+      const bankTxnId = bankTxn?.id;
+
       // CREDITS → reconcile with receivables
       if (txn.amount > 0) {
         const { data: matchVenda } = await supabase
@@ -223,62 +252,122 @@ Deno.serve(async (req) => {
             observacao: `Conciliação OFX - ${txn.name || txn.memo}`.trim(),
           });
           matched_recebiveis++;
-        } else {
-          skipped++;
         }
+        created++;
         continue;
       }
 
-      // DEBITS → reconcile with contas_pagar_lancamentos
-      const { data: existing } = await supabase
-        .from("contas_pagar_lancamentos")
-        .select("id")
-        .eq("clinica_id", clinica_id)
-        .eq("ofx_transaction_id", txn.fitid)
-        .maybeSingle();
-
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
+      // DEBITS → try to match with pending expense lancamentos (comprovantes)
       const absVal = Math.abs(txn.amount);
-      const { data: matchLanc } = await supabase
-        .from("contas_pagar_lancamentos")
-        .select("id, valor, descricao")
-        .eq("clinica_id", clinica_id)
-        .eq("data_competencia", txn.date)
-        .gte("valor", absVal * 0.98)
-        .lte("valor", absVal * 1.02)
-        .is("ofx_transaction_id", null)
-        .limit(1)
-        .maybeSingle();
+      const toleranciaValor = 0.50; // R$ 0.50 tolerance
+      const toleranciaDias = 3;
 
-      if (matchLanc) {
-        await supabase
+      // Get pending conciliacao_despesas with lancamento data
+      const { data: pendingConciliacoes } = await supabase
+        .from("conciliacao_despesas")
+        .select("id, lancamento_id, match_key")
+        .eq("clinica_id", clinica_id)
+        .eq("status", "pendente");
+
+      // Enrich with lancamento data
+      const pendingMatches: Array<{ id: string; lancamento_id: string; match_key: string; valor: number; data_competencia: string; fornecedor: string; descricao: string }> = [];
+      if (pendingConciliacoes && pendingConciliacoes.length > 0) {
+        const lancIds = pendingConciliacoes.map((p: any) => p.lancamento_id);
+        const { data: lancs } = await supabase
           .from("contas_pagar_lancamentos")
-          .update({
-            ofx_transaction_id: txn.fitid,
-            status: "classificado",
+          .select("id, valor, data_competencia, fornecedor, descricao")
+          .in("id", lancIds);
+        const lancMap = new Map((lancs || []).map((l: any) => [l.id, l]));
+        for (const pc of pendingConciliacoes) {
+          const l = lancMap.get(pc.lancamento_id);
+          if (l) pendingMatches.push({ id: pc.id, lancamento_id: pc.lancamento_id, match_key: pc.match_key || "", ...l });
+        }
+      }
+
+      let matchedExpense = false;
+      if (pendingMatches && pendingMatches.length > 0) {
+        const txnDate = new Date(txn.date);
+        const txnDescNorm = normalizeText(txn.name + " " + txn.memo);
+
+        for (const pm of pendingMatches) {
+          const valorDiff = Math.abs(pm.valor - absVal);
+          if (valorDiff > toleranciaValor) continue;
+
+          const lancDate = new Date(pm.data_competencia);
+          const daysDiff = Math.abs((txnDate.getTime() - lancDate.getTime()) / 86400000);
+          if (daysDiff > toleranciaDias) continue;
+
+          // Text similarity bonus
+          const fornNorm = normalizeText(pm.fornecedor || pm.descricao || "");
+          const textMatch = fornNorm && txnDescNorm.includes(fornNorm.slice(0, 6));
+          const score = textMatch ? 95 : (valorDiff < 0.01 && daysDiff < 1 ? 90 : 70);
+          const metodo = valorDiff < 0.01 && daysDiff < 1 ? "valor_data_exato" : "valor_fuzzy";
+
+          // Conciliate!
+          await supabase.from("conciliacao_despesas").update({
+            status: valorDiff > 0.01 ? "divergente" : "conciliado",
+            transacao_bancaria_id: bankTxnId,
+            score,
+            metodo_match: metodo,
+            divergencia: valorDiff,
+            conciliado_em: new Date().toISOString(),
+            observacao: `Auto-conciliado via OFX. Diff: R$${valorDiff.toFixed(2)}, dias: ${daysDiff.toFixed(0)}`,
+          }).eq("id", pm.id);
+
+          // Update lancamento
+          await supabase.from("contas_pagar_lancamentos").update({
+            status: "pago",
             data_pagamento: txn.date,
-          })
-          .eq("id", matchLanc.id);
-        matched++;
-      } else {
-        const { error } = await supabase.from("contas_pagar_lancamentos").insert({
-          clinica_id,
-          descricao: txn.name || txn.memo || "Importação OFX",
-          valor: absVal,
-          data_competencia: txn.date,
-          data_pagamento: txn.date,
-          status: "a_classificar",
-          ofx_transaction_id: txn.fitid,
-          observacao: `Auto-importado OFX. ${txn.memo || ""}`.trim(),
-        });
-        if (error) {
-          errors.push(`FITID ${txn.fitid}: ${error.message}`);
+            ofx_transaction_id: txn.fitid,
+          }).eq("id", pm.lancamento_id);
+
+          matched++;
+          matchedExpense = true;
+          break;
+        }
+      }
+
+      // If no pending comprovante match, try existing lancamentos (legacy flow)
+      if (!matchedExpense) {
+        const { data: matchLanc } = await supabase
+          .from("contas_pagar_lancamentos")
+          .select("id, valor, descricao")
+          .eq("clinica_id", clinica_id)
+          .eq("data_competencia", txn.date)
+          .gte("valor", absVal * 0.98)
+          .lte("valor", absVal * 1.02)
+          .is("ofx_transaction_id", null)
+          .not("status", "eq", "pendente_conciliacao")
+          .limit(1)
+          .maybeSingle();
+
+        if (matchLanc) {
+          await supabase
+            .from("contas_pagar_lancamentos")
+            .update({
+              ofx_transaction_id: txn.fitid,
+              status: "pago",
+              data_pagamento: txn.date,
+            })
+            .eq("id", matchLanc.id);
+          matched++;
         } else {
-          created++;
+          // Create new unclassified lancamento from bank debit
+          const { error } = await supabase.from("contas_pagar_lancamentos").insert({
+            clinica_id,
+            descricao: txn.name || txn.memo || "Importação OFX",
+            valor: absVal,
+            data_competencia: txn.date,
+            data_pagamento: txn.date,
+            status: "a_classificar",
+            ofx_transaction_id: txn.fitid,
+            observacao: `Auto-importado OFX. ${txn.memo || ""}`.trim(),
+          });
+          if (error) {
+            errors.push(`FITID ${txn.fitid}: ${error.message}`);
+          } else {
+            created++;
+          }
         }
       }
     }
