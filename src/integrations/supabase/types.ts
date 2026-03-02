@@ -521,6 +521,7 @@ export type Database = {
           match_key: string | null
           metodo_match: string | null
           observacao: string | null
+          rule_applied: string | null
           score: number | null
           status: string
           transacao_bancaria_id: string | null
@@ -537,6 +538,7 @@ export type Database = {
           match_key?: string | null
           metodo_match?: string | null
           observacao?: string | null
+          rule_applied?: string | null
           score?: number | null
           status?: string
           transacao_bancaria_id?: string | null
@@ -553,6 +555,7 @@ export type Database = {
           match_key?: string | null
           metodo_match?: string | null
           observacao?: string | null
+          rule_applied?: string | null
           score?: number | null
           status?: string
           transacao_bancaria_id?: string | null
@@ -771,7 +774,10 @@ export type Database = {
           forma_pagamento_raw: string | null
           fornecedor: string | null
           id: string
+          match_rule: string | null
+          match_score: number | null
           medico_id: string | null
+          needs_review: boolean
           observacao: string | null
           ofx_transaction_id: string | null
           plano_contas_id: string | null
@@ -800,7 +806,10 @@ export type Database = {
           forma_pagamento_raw?: string | null
           fornecedor?: string | null
           id?: string
+          match_rule?: string | null
+          match_score?: number | null
           medico_id?: string | null
+          needs_review?: boolean
           observacao?: string | null
           ofx_transaction_id?: string | null
           plano_contas_id?: string | null
@@ -829,7 +838,10 @@ export type Database = {
           forma_pagamento_raw?: string | null
           fornecedor?: string | null
           id?: string
+          match_rule?: string | null
+          match_score?: number | null
           medico_id?: string | null
+          needs_review?: boolean
           observacao?: string | null
           ofx_transaction_id?: string | null
           plano_contas_id?: string | null
@@ -3820,6 +3832,7 @@ export type Database = {
         | "pago"
         | "cancelado"
         | "pendente_conciliacao"
+        | "divergente"
       status_pagamento_nf:
         | "a_emitir"
         | "emitida"
@@ -4048,6 +4061,7 @@ export const Constants = {
         "pago",
         "cancelado",
         "pendente_conciliacao",
+        "divergente",
       ],
       status_pagamento_nf: [
         "a_emitir",

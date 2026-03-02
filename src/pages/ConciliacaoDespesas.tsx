@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
-  CheckCircle2, AlertTriangle, Clock, RefreshCw, FileText, Banknote,
+  CheckCircle2, AlertTriangle, Clock, RefreshCw, Undo2, Eye, EyeOff,
 } from "lucide-react";
 
 interface ConciliacaoDespesa {
@@ -20,16 +20,17 @@ interface ConciliacaoDespesa {
   match_key: string | null;
   score: number | null;
   metodo_match: string | null;
+  rule_applied: string | null;
   divergencia: number | null;
   observacao: string | null;
   conciliado_em: string | null;
   created_at: string;
-  // joined
   lancamento?: {
     descricao: string | null;
     fornecedor: string | null;
     valor: number;
     data_competencia: string;
+    data_vencimento: string | null;
     forma_pagamento: string | null;
     status: string;
   };
@@ -48,19 +49,20 @@ export default function ConciliacaoDespesas() {
   const { toast } = useToast();
   const [data, setData] = useState<ConciliacaoDespesa[]>([]);
   const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!clinicaId) return;
     setLoading(true);
     const { data: rows, error } = await supabase
       .from("conciliacao_despesas")
       .select(`
         id, lancamento_id, transacao_bancaria_id, status, match_key, score,
-        metodo_match, divergencia, observacao, conciliado_em, created_at
+        metodo_match, rule_applied, divergencia, observacao, conciliado_em, created_at
       `)
       .eq("clinica_id", clinicaId)
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(500);
 
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -68,13 +70,12 @@ export default function ConciliacaoDespesas() {
       return;
     }
 
-    // Enrich with lancamento data
-    const lancIds = (rows || []).map((r: any) => r.lancamento_id).filter(Boolean);
-    const bankIds = (rows || []).map((r: any) => r.transacao_bancaria_id).filter(Boolean);
+    const lancIds = [...new Set((rows || []).map((r: any) => r.lancamento_id).filter(Boolean))];
+    const bankIds = [...new Set((rows || []).map((r: any) => r.transacao_bancaria_id).filter(Boolean))];
 
     const [lancRes, bankRes] = await Promise.all([
       lancIds.length > 0
-        ? supabase.from("contas_pagar_lancamentos").select("id, descricao, fornecedor, valor, data_competencia, forma_pagamento, status").in("id", lancIds)
+        ? supabase.from("contas_pagar_lancamentos").select("id, descricao, fornecedor, valor, data_competencia, data_vencimento, forma_pagamento, status").in("id", lancIds)
         : { data: [] },
       bankIds.length > 0
         ? supabase.from("transacoes_bancarias").select("id, descricao, valor, data_transacao").in("id", bankIds)
@@ -84,17 +85,106 @@ export default function ConciliacaoDespesas() {
     const lancMap = new Map((lancRes.data || []).map((l: any) => [l.id, l]));
     const bankMap = new Map((bankRes.data || []).map((b: any) => [b.id, b]));
 
-    const enriched = (rows || []).map((r: any) => ({
+    setData((rows || []).map((r: any) => ({
       ...r,
       lancamento: lancMap.get(r.lancamento_id) || undefined,
       transacao_bancaria: r.transacao_bancaria_id ? bankMap.get(r.transacao_bancaria_id) || null : null,
-    }));
-
-    setData(enriched);
+    })));
     setLoading(false);
+  }, [clinicaId, toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const confirmMatch = async (item: ConciliacaoDespesa) => {
+    if (!item.transacao_bancaria_id || !clinicaId) return;
+    setActionLoading(item.id);
+    try {
+      // Update conciliacao_despesas
+      await supabase.from("conciliacao_despesas").update({
+        status: "conciliado",
+        conciliado_em: new Date().toISOString(),
+        metodo_match: "manual_confirm",
+      }).eq("id", item.id);
+
+      // Update lancamento to pago
+      const bankDate = item.transacao_bancaria?.data_transacao?.split("T")[0] || new Date().toISOString().split("T")[0];
+      await supabase.from("contas_pagar_lancamentos").update({
+        status: "pago",
+        data_pagamento: bankDate,
+        match_score: item.score,
+        match_rule: "manual_confirm",
+        needs_review: false,
+      }).eq("id", item.lancamento_id);
+
+      // Mark bank transaction
+      await supabase.from("transacoes_bancarias")
+        .update({ status: "conciliado", categoria_auto: `ap_manual:${item.lancamento_id}` })
+        .eq("id", item.transacao_bancaria_id);
+
+      toast({ title: "Conciliado", description: "Match confirmado com sucesso." });
+      load();
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+    setActionLoading(null);
   };
 
-  useEffect(() => { load(); }, [clinicaId]);
+  const undoMatch = async (item: ConciliacaoDespesa) => {
+    if (!clinicaId) return;
+    setActionLoading(item.id);
+    try {
+      const prevTxId = item.transacao_bancaria_id;
+
+      // Reset conciliacao to pendente
+      await supabase.from("conciliacao_despesas").update({
+        status: "pendente",
+        transacao_bancaria_id: null,
+        score: 0,
+        conciliado_em: null,
+        metodo_match: null,
+        rule_applied: null,
+        divergencia: 0,
+      }).eq("id", item.id);
+
+      // Reset lancamento
+      await supabase.from("contas_pagar_lancamentos").update({
+        status: "pendente_conciliacao",
+        data_pagamento: null,
+        match_score: null,
+        match_rule: null,
+        needs_review: false,
+      }).eq("id", item.lancamento_id);
+
+      // Release bank transaction
+      if (prevTxId) {
+        await supabase.from("transacoes_bancarias")
+          .update({ status: "pendente", categoria_auto: null })
+          .eq("id", prevTxId);
+      }
+
+      toast({ title: "Desfeito", description: "Conciliação revertida." });
+      load();
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+    setActionLoading(null);
+  };
+
+  const ignoreItem = async (item: ConciliacaoDespesa) => {
+    setActionLoading(item.id);
+    try {
+      await supabase.from("conciliacao_despesas").update({
+        status: "ignorado",
+        observacao: (item.observacao || "") + " [ignorado manualmente]",
+      }).eq("id", item.id);
+
+      toast({ title: "Ignorado", description: "Item removido da fila." });
+      load();
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+    setActionLoading(null);
+  };
 
   const counts = {
     pendente: data.filter(d => d.status === "pendente").length,
@@ -102,22 +192,73 @@ export default function ConciliacaoDespesas() {
     divergente: data.filter(d => d.status === "divergente").length,
   };
 
+  const renderRow = (d: ConciliacaoDespesa, tab: string) => (
+    <TableRow key={d.id}>
+      <TableCell><StatusBadge status={d.status} /></TableCell>
+      <TableCell className="text-sm font-medium">{d.lancamento?.fornecedor || "-"}</TableCell>
+      <TableCell className="max-w-[180px] truncate text-xs text-muted-foreground">
+        {d.lancamento?.descricao || "-"}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        {d.lancamento ? fmt(d.lancamento.valor) : "-"}
+      </TableCell>
+      <TableCell className="text-xs">
+        {d.lancamento ? new Date(d.lancamento.data_competencia).toLocaleDateString("pt-BR") : "-"}
+      </TableCell>
+      {tab !== "pendente" && (
+        <>
+          <TableCell className="max-w-[180px] truncate text-xs text-muted-foreground">
+            {d.transacao_bancaria?.descricao || "-"}
+          </TableCell>
+          <TableCell className="text-right font-mono text-sm">
+            {d.transacao_bancaria ? fmt(Math.abs(d.transacao_bancaria.valor)) : "-"}
+          </TableCell>
+          <TableCell className="text-right font-mono text-xs">
+            {d.divergencia != null && d.divergencia > 0
+              ? <span className="text-amber-600">{fmt(d.divergencia)}</span>
+              : <span className="text-emerald-600">R$ 0,00</span>}
+          </TableCell>
+          <TableCell className="text-xs">{d.score != null ? `${d.score.toFixed(0)}%` : "-"}</TableCell>
+        </>
+      )}
+      <TableCell>
+        <Badge variant="outline" className="text-xs">{d.lancamento?.forma_pagamento || "-"}</Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex gap-1 justify-end">
+          {tab === "divergente" && (
+            <>
+              <Button size="sm" variant="default" disabled={actionLoading === d.id} onClick={() => confirmMatch(d)}>
+                <CheckCircle2 className="mr-1 h-3 w-3" />Confirmar
+              </Button>
+              <Button size="sm" variant="outline" disabled={actionLoading === d.id} onClick={() => ignoreItem(d)}>
+                <EyeOff className="mr-1 h-3 w-3" />Ignorar
+              </Button>
+            </>
+          )}
+          {tab === "conciliado" && (
+            <Button size="sm" variant="outline" disabled={actionLoading === d.id} onClick={() => undoMatch(d)}>
+              <Undo2 className="mr-1 h-3 w-3" />Desfazer
+            </Button>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Conciliação de Despesas</h1>
-            <p className="text-sm text-muted-foreground">
-              Comprovantes × Extrato Bancário
-            </p>
+            <p className="text-sm text-muted-foreground">Comprovantes × Extrato Bancário</p>
           </div>
           <Button variant="outline" onClick={load} disabled={loading} size="sm">
             <RefreshCw className="mr-1 h-4 w-4" />Atualizar
           </Button>
         </div>
 
-        {/* KPI Cards */}
         <div className="grid gap-4 sm:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -142,30 +283,23 @@ export default function ConciliacaoDespesas() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Divergentes</CardTitle>
-              <AlertTriangle className="h-5 w-5 text-destructive" />
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{counts.divergente}</p>
-              <p className="text-xs text-muted-foreground">valor ou data diferentes</p>
+              <p className="text-xs text-muted-foreground">revisão necessária</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Tabs */}
         <Tabs defaultValue="pendente">
           <TabsList>
-            <TabsTrigger value="pendente">
-              Pendentes ({counts.pendente})
-            </TabsTrigger>
-            <TabsTrigger value="conciliado">
-              Conciliados ({counts.conciliado})
-            </TabsTrigger>
-            <TabsTrigger value="divergente">
-              Divergências ({counts.divergente})
-            </TabsTrigger>
+            <TabsTrigger value="pendente">Pendentes ({counts.pendente})</TabsTrigger>
+            <TabsTrigger value="divergente">Divergências ({counts.divergente})</TabsTrigger>
+            <TabsTrigger value="conciliado">Conciliados ({counts.conciliado})</TabsTrigger>
           </TabsList>
 
-          {["pendente", "conciliado", "divergente"].map((tab) => (
+          {["pendente", "divergente", "conciliado"].map((tab) => (
             <TabsContent key={tab} value={tab}>
               <Card>
                 <CardContent className="p-0">
@@ -174,71 +308,27 @@ export default function ConciliacaoDespesas() {
                       <TableRow>
                         <TableHead>Status</TableHead>
                         <TableHead>Fornecedor</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead className="text-right">Valor Comprovante</TableHead>
-                        <TableHead>Data Competência</TableHead>
+                        <TableHead>Descrição AP</TableHead>
+                        <TableHead className="text-right">Valor AP</TableHead>
+                        <TableHead>Data</TableHead>
+                        {tab !== "pendente" && <TableHead>Memo Extrato</TableHead>}
                         {tab !== "pendente" && <TableHead className="text-right">Valor Extrato</TableHead>}
                         {tab !== "pendente" && <TableHead className="text-right">Divergência</TableHead>}
                         {tab !== "pendente" && <TableHead>Score</TableHead>}
                         <TableHead>Forma Pgto</TableHead>
-                        <TableHead>Criado em</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data
-                        .filter((d) => d.status === tab)
-                        .map((d) => (
-                          <TableRow key={d.id}>
-                            <TableCell>
-                              <StatusBadge status={d.status} />
-                            </TableCell>
-                            <TableCell className="text-sm font-medium">
-                              {d.lancamento?.fornecedor || "-"}
-                            </TableCell>
-                            <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
-                              {d.lancamento?.descricao || "-"}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-sm">
-                              {d.lancamento ? fmt(d.lancamento.valor) : "-"}
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              {d.lancamento ? new Date(d.lancamento.data_competencia).toLocaleDateString("pt-BR") : "-"}
-                            </TableCell>
-                            {tab !== "pendente" && (
-                              <TableCell className="text-right font-mono text-sm">
-                                {d.transacao_bancaria ? fmt(Math.abs(d.transacao_bancaria.valor)) : "-"}
-                              </TableCell>
-                            )}
-                            {tab !== "pendente" && (
-                              <TableCell className="text-right font-mono text-xs">
-                                {d.divergencia != null && d.divergencia > 0
-                                  ? <span className="text-amber-600">{fmt(d.divergencia)}</span>
-                                  : <span className="text-emerald-600">R$ 0,00</span>}
-                              </TableCell>
-                            )}
-                            {tab !== "pendente" && (
-                              <TableCell className="text-xs">
-                                {d.score != null ? `${d.score.toFixed(0)}%` : "-"}
-                              </TableCell>
-                            )}
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs">
-                                {d.lancamento?.forma_pagamento || "-"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {new Date(d.created_at).toLocaleDateString("pt-BR")}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                      {data.filter((d) => d.status === tab).map((d) => renderRow(d, tab))}
                       {data.filter((d) => d.status === tab).length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={10} className="py-8 text-center text-sm text-muted-foreground">
+                          <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
                             {tab === "pendente"
-                              ? "Nenhum comprovante pendente de conciliação. Importe comprovantes via Make ou manualmente."
-                              : tab === "conciliado"
-                              ? "Nenhuma despesa conciliada ainda. Importe o extrato bancário (OFX) para iniciar a conciliação."
-                              : "Nenhuma divergência encontrada."}
+                              ? "Nenhum comprovante pendente. Importe comprovantes via Make ou manualmente."
+                              : tab === "divergente"
+                              ? "Nenhuma divergência. Execute a conciliação após importar o extrato."
+                              : "Nenhuma despesa conciliada ainda."}
                           </TableCell>
                         </TableRow>
                       )}
@@ -259,5 +349,7 @@ function StatusBadge({ status }: { status: string }) {
     return <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20"><CheckCircle2 className="mr-1 h-3 w-3" />Conciliado</Badge>;
   if (status === "divergente")
     return <Badge variant="outline" className="border-amber-500/30 text-amber-600"><AlertTriangle className="mr-1 h-3 w-3" />Divergente</Badge>;
+  if (status === "ignorado")
+    return <Badge variant="outline" className="border-muted text-muted-foreground"><EyeOff className="mr-1 h-3 w-3" />Ignorado</Badge>;
   return <Badge variant="outline" className="border-muted text-muted-foreground"><Clock className="mr-1 h-3 w-3" />Pendente</Badge>;
 }
