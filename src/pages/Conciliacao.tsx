@@ -103,10 +103,10 @@ export default function Conciliacao() {
   };
 
   const totalPendencias = result
-    ? result.pendencias.vendas_sem_match +
-      result.pendencias.getnet_sem_match +
-      result.pendencias.creditos_sem_match +
-      result.pendencias.debitos_sem_match
+    ? (result.pendencias?.vendas_sem_match ?? 0) +
+      (result.pendencias?.getnet_sem_match ?? 0) +
+      (result.pendencias?.creditos_sem_match ?? 0) +
+      (result.pendencias?.debitos_sem_match ?? 0)
     : 0;
 
   const [importingGetnet, setImportingGetnet] = useState(false);
@@ -221,9 +221,9 @@ export default function Conciliacao() {
         {/* Cards de resultado */}
         {result && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <SummaryCard title="Vendas (Feegow)" value={result.totais.vendas_feegow} matched={result.matches.feegow_getnet} pending={result.pendencias.vendas_sem_match} icon={<ArrowDownCircle className="h-5 w-5 text-emerald-500" />} />
-            <SummaryCard title="Getnet" value={result.totais.getnet_transacoes} matched={result.matches.feegow_getnet} pending={result.pendencias.getnet_sem_match} icon={<CreditCard className="h-5 w-5 text-blue-500" />} />
-            <SummaryCard title="Créditos (Banco)" value={result.totais.creditos_banco} matched={result.matches.getnet_banco} pending={result.pendencias.creditos_sem_match} icon={<ArrowUpCircle className="h-5 w-5 text-violet-500" />} />
+            <SummaryCard title="Vendas (Feegow)" value={result.totais?.vendas_feegow ?? 0} matched={result.matches?.feegow_getnet ?? 0} pending={result.pendencias?.vendas_sem_match ?? 0} icon={<ArrowDownCircle className="h-5 w-5 text-emerald-500" />} />
+            <SummaryCard title="Getnet" value={result.totais?.getnet_transacoes ?? 0} matched={result.matches?.feegow_getnet ?? 0} pending={result.pendencias?.getnet_sem_match ?? 0} icon={<CreditCard className="h-5 w-5 text-blue-500" />} />
+            <SummaryCard title="Créditos (Banco)" value={result.totais?.creditos_banco ?? 0} matched={result.matches?.getnet_banco ?? 0} pending={result.pendencias?.creditos_sem_match ?? 0} icon={<ArrowUpCircle className="h-5 w-5 text-violet-500" />} />
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Triplo ✓</CardTitle>
@@ -278,9 +278,9 @@ export default function Conciliacao() {
                 />
                 <WaterfallStep
                   label="Feegow ↔ Getnet TX"
-                  conciliadas={result.receitas.feegow_getnet?.conciliadas ?? result.matches.feegow_getnet}
+                  conciliadas={result.receitas.feegow_getnet?.conciliadas ?? result.matches?.feegow_getnet ?? 0}
                   divergentes={0}
-                  pendentes={result.receitas.feegow_getnet?.pendentes ?? result.pendencias.vendas_sem_match}
+                  pendentes={result.receitas.feegow_getnet?.pendentes ?? result.pendencias?.vendas_sem_match ?? 0}
                 />
                 <WaterfallStep
                   label="Getnet Receb. ↔ Banco"
@@ -290,9 +290,9 @@ export default function Conciliacao() {
                 />
                 <WaterfallStep
                   label="Getnet TX ↔ Banco"
-                  conciliadas={result.receitas.getnet_banco?.conciliadas ?? result.matches.getnet_banco}
+                  conciliadas={result.receitas.getnet_banco?.conciliadas ?? result.matches?.getnet_banco ?? 0}
                   divergentes={0}
-                  pendentes={result.receitas.getnet_banco?.pendentes ?? result.pendencias.creditos_sem_match}
+                  pendentes={result.receitas.getnet_banco?.pendentes ?? result.pendencias?.creditos_sem_match ?? 0}
                 />
               </div>
               {result.receitas.triplo !== undefined && result.receitas.triplo > 0 && (
