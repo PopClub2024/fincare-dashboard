@@ -14,7 +14,6 @@ async function verifyAuth(req: Request): Promise<boolean> {
   const bearer = (req.headers.get("authorization") || "").replace("Bearer ", "");
   if (secret && bearer && bearer === secret) return true;
 
-  // Fallback: validate user JWT
   if (bearer) {
     try {
       const sb = createClient(
@@ -29,17 +28,124 @@ async function verifyAuth(req: Request): Promise<boolean> {
   return false;
 }
 
+// ─── Auto-classification rules ──────────────────────────────────
+interface ClassificationRule {
+  pattern: RegExp;
+  tipo_despesa: "fixo" | "variavel";
+  categoria: string;
+  fornecedor_sugerido?: string;
+}
+
+const CLASSIFICATION_RULES: ClassificationRule[] = [
+  // Impostos e taxas
+  { pattern: /RECEITA FEDERAL|RFB|DARF|DARA PARC|SIMPLES NACIONAL/i, tipo_despesa: "fixo", categoria: "impostos", fornecedor_sugerido: "Receita Federal" },
+  { pattern: /PREFEITURA|ISS|IPTU|ALVARA/i, tipo_despesa: "fixo", categoria: "impostos_municipais", fornecedor_sugerido: "Prefeitura" },
+  { pattern: /SEFAZ|ICMS/i, tipo_despesa: "fixo", categoria: "impostos_estaduais", fornecedor_sugerido: "SEFAZ" },
+
+  // Utilities
+  { pattern: /ENEL|LIGHT|CEMIG|CPFL|ENERGISA|ELETRO|COELBA|CELPE|COSERN/i, tipo_despesa: "fixo", categoria: "energia", fornecedor_sugerido: "Energia Elétrica" },
+  { pattern: /CEDAE|SABESP|COPASA|SANEAGO|EMBASA|COMPESA|AGUAS/i, tipo_despesa: "fixo", categoria: "agua_esgoto", fornecedor_sugerido: "Água e Esgoto" },
+  { pattern: /CLARO|VIVO|TIM |OI S\.?A|NET SERVICOS|TELECOM|EMBRATEL/i, tipo_despesa: "fixo", categoria: "telefonia_internet", fornecedor_sugerido: "Telefonia/Internet" },
+  { pattern: /GAS NATURAL|NATURGY|COMGAS|CEG|GASMIG/i, tipo_despesa: "fixo", categoria: "gas", fornecedor_sugerido: "Gás" },
+
+  // Aluguel e condomínio
+  { pattern: /ALUGUEL|LOCACAO|IMOBILIARIA|CONDOMINIO/i, tipo_despesa: "fixo", categoria: "aluguel", fornecedor_sugerido: "Imóvel" },
+
+  // Folha e encargos
+  { pattern: /FOLHA|SALARIO|REMUNERACAO|PAGTO SALARIO/i, tipo_despesa: "fixo", categoria: "folha_pagamento" },
+  { pattern: /FGTS|CAIXA ECONOMICA.*GRF/i, tipo_despesa: "fixo", categoria: "encargos_trabalhistas", fornecedor_sugerido: "FGTS" },
+  { pattern: /INSS|GPS|PREV.?SOCIAL|DATAPREV/i, tipo_despesa: "fixo", categoria: "encargos_trabalhistas", fornecedor_sugerido: "INSS" },
+
+  // Seguros
+  { pattern: /SEGURO|BRADESCO SEGUROS|PORTO SEGURO|SULAMERICA|UNIMED.*SEG/i, tipo_despesa: "fixo", categoria: "seguros" },
+
+  // Convênios médicos / planos
+  { pattern: /UNIMED|AMIL|BRADESCO SAUDE|SULAMERICA|NOTREDAME|HAPVIDA|CASSI/i, tipo_despesa: "variavel", categoria: "convenios" },
+
+  // Materiais e suprimentos
+  { pattern: /FARMACIA|DROGARIA|MATERIAL MEDICO|HOSPITALAR/i, tipo_despesa: "variavel", categoria: "materiais_medicos" },
+  { pattern: /LABORATORIO|LABCLIN|DIAGNOSTICO/i, tipo_despesa: "variavel", categoria: "laboratorio" },
+
+  // Marketing
+  { pattern: /GOOGLE ADS|META ADS|FACEBOOK|INSTAGRAM|MARKETING|PUBLICIDADE/i, tipo_despesa: "variavel", categoria: "marketing" },
+
+  // Software e tecnologia
+  { pattern: /FEEGOW|TOTVS|SISTEMA|SOFTWARE|SAAS|MICROSOFT|GOOGLE CLOUD|AWS/i, tipo_despesa: "fixo", categoria: "tecnologia" },
+
+  // Contabilidade e jurídico
+  { pattern: /CONTABIL|ESCRITORIO|ADVOCACIA|JURIDICO|CRC|CRM|CONSELHO/i, tipo_despesa: "fixo", categoria: "servicos_profissionais" },
+
+  // Empréstimos e financiamentos
+  { pattern: /EMPRESTIMO|FINANCIAMENTO|PARCELA|AMORTIZA|CDC|CREDITO PESSOAL/i, tipo_despesa: "fixo", categoria: "emprestimos" },
+
+  // Cartão de crédito
+  { pattern: /CARTAO|FATURA|ANUIDADE/i, tipo_despesa: "variavel", categoria: "cartao_credito" },
+
+  // Débito automático genérico
+  { pattern: /DEB AUT|DEBITO AUTOMATICO/i, tipo_despesa: "variavel", categoria: "debito_automatico" },
+
+  // PIX genérico
+  { pattern: /PIX ENVIADO|PIX TRANSF/i, tipo_despesa: "variavel", categoria: "transferencia_pix" },
+
+  // Boleto genérico
+  { pattern: /PAGAMENTO DE BOLETO|PAG BOLETO|BOLETO/i, tipo_despesa: "variavel", categoria: "boleto" },
+
+  // TED/DOC
+  { pattern: /TED|DOC|TRANSF BANCARIA/i, tipo_despesa: "variavel", categoria: "transferencia" },
+];
+
+function classifyTransaction(description: string): { tipo_despesa: string; categoria: string; fornecedor_sugerido: string | null; status: string } {
+  const desc = (description || "").toUpperCase();
+  for (const rule of CLASSIFICATION_RULES) {
+    if (rule.pattern.test(desc)) {
+      return {
+        tipo_despesa: rule.tipo_despesa,
+        categoria: rule.categoria,
+        fornecedor_sugerido: rule.fornecedor_sugerido || null,
+        status: "classificado",
+      };
+    }
+  }
+  return { tipo_despesa: "variavel", categoria: "", fornecedor_sugerido: null, status: "a_classificar" };
+}
+
+// ─── Detect credit meio_recebimento from description ────────────
+function detectMeioRecebimento(description: string): string {
+  const desc = (description || "").toUpperCase();
+  if (/PIX/i.test(desc)) return "pix";
+  if (/TED|DOC|TRANSF/i.test(desc)) return "transferencia";
+  if (/BOLETO/i.test(desc)) return "boleto";
+  if (/CARTAO|CREDITO/i.test(desc)) return "cartao_credito";
+  if (/DEBITO/i.test(desc)) return "cartao_debito";
+  return "outros";
+}
+
 // ─── OFX Parser ─────────────────────────────────────────────────
-function parseOFX(ofxContent: string) {
-  const transactions: Array<{
+interface ParsedOFX {
+  bankId: string;
+  acctId: string;
+  acctType: string;
+  transactions: Array<{
     fitid: string;
     type: string;
     date: string;
     amount: number;
     name: string;
     memo: string;
-  }> = [];
+  }>;
+}
 
+function parseOFX(ofxContent: string): ParsedOFX {
+  // Extract bank account info
+  const getBankVal = (tag: string) => {
+    const m = new RegExp(`<${tag}>([^<\\n]+)`, "i").exec(ofxContent);
+    return m ? m[1].trim() : "";
+  };
+  const bankId = getBankVal("BANKID");
+  const acctId = getBankVal("ACCTID");
+  const acctType = getBankVal("ACCTTYPE");
+
+  const transactions: ParsedOFX["transactions"] = [];
   const trnRegex = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi;
   let match;
   while ((match = trnRegex.exec(ofxContent)) !== null) {
@@ -64,7 +170,7 @@ function parseOFX(ofxContent: string) {
     });
   }
 
-  return transactions;
+  return { bankId, acctId, acctType, transactions };
 }
 
 // ─── Text normalization ─────────────────────────────────────────
@@ -94,7 +200,6 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Auth
   if (!(await verifyAuth(req))) {
     return jsonResponse({ error: "Unauthorized" }, 401);
   }
@@ -113,29 +218,28 @@ Deno.serve(async (req) => {
     // ── Parse request ──────────────────────────────────────────
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
-      clinica_id = (formData.get("clinica_id") as string) || "";
+      clinica_id = (formData.get("clinica_id") as string)
+        || (formData.get("id_da_clinica") as string)
+        || "";
       filename = (formData.get("filename") as string) || "";
 
-      const file = formData.get("file") as File | null;
+      const file = (formData.get("file") as File)
+        || (formData.get("arquivo") as File)
+        || null;
       if (!file) {
         return jsonResponse({ error: "Campo 'file' obrigatório no multipart" }, 400);
       }
-      if (!filename) {
-        filename = file.name || "upload.ofx";
-      }
+      if (!filename) filename = file.name || "upload.ofx";
 
-      // Validate extension
       const ext = filename.split(".").pop()?.toLowerCase();
       if (ext !== "ofx") {
         return jsonResponse({ error: "Arquivo deve ter extensão .ofx" }, 400);
       }
-
       ofxContent = await file.text();
     } else if (contentType.includes("application/json")) {
       const body = await req.json();
       clinica_id = body.clinica_id || "";
       filename = body.filename || "import.ofx";
-
       if (body.ofx_content) {
         ofxContent = body.ofx_content;
       } else if (body.file_base64) {
@@ -145,19 +249,17 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Content-Type deve ser multipart/form-data ou application/json" }, 400);
     }
 
-    // ── Validations ────────────────────────────────────────────
-    if (!clinica_id) {
-      return jsonResponse({ error: "clinica_id obrigatório" }, 400);
-    }
-    if (!ofxContent) {
-      return jsonResponse({ error: "Conteúdo OFX vazio" }, 400);
-    }
+    if (!clinica_id) return jsonResponse({ error: "clinica_id obrigatório" }, 400);
+    if (!ofxContent) return jsonResponse({ error: "Conteúdo OFX vazio" }, 400);
 
     // ── Parse OFX ──────────────────────────────────────────────
-    const transactions = parseOFX(ofxContent);
+    const parsed = parseOFX(ofxContent);
+    const { transactions, bankId, acctId } = parsed;
     if (transactions.length === 0) {
       return jsonResponse({ error: "Nenhuma transação encontrada no OFX" }, 400);
     }
+
+    const bancoRef = [bankId, acctId].filter(Boolean).join(" / ") || filename.split("_")[0] || "Desconhecido";
 
     // ── Idempotency via hash ───────────────────────────────────
     const fileHash = await sha256(clinica_id + ofxContent);
@@ -175,8 +277,8 @@ Deno.serve(async (req) => {
         import_run_id: existingRun.id,
         imported_count: 0,
         duplicates_count: transactions.length,
-        period_start: null,
-        period_end: null,
+        creditos: 0,
+        debitos: 0,
       });
     }
 
@@ -204,14 +306,17 @@ Deno.serve(async (req) => {
     const importRunId = run?.id;
 
     // ── Process transactions ───────────────────────────────────
-    let created = 0;
+    let debitos_criados = 0;
+    let creditos_criados = 0;
+    let matched_ap = 0;
+    let matched_ar = 0;
     let skipped = 0;
-    let matched = 0;
-    let matched_recebiveis = 0;
     const errors: string[] = [];
 
     for (const txn of transactions) {
-      // First, insert into transacoes_bancarias
+      const descricao = [txn.name, txn.memo].filter(Boolean).join(" - ");
+
+      // Insert into transacoes_bancarias
       const { data: bankTxn, error: bankErr } = await supabase
         .from("transacoes_bancarias")
         .insert({
@@ -220,14 +325,13 @@ Deno.serve(async (req) => {
           tipo: txn.amount > 0 ? "credito" : "debito",
           valor: txn.amount,
           data_transacao: txn.date,
-          descricao: [txn.name, txn.memo].filter(Boolean).join(" - "),
+          descricao,
           status: "importado",
         })
         .select("id")
         .maybeSingle();
 
       if (bankErr) {
-        // Likely duplicate fitid
         if (bankErr.code === "23505") { skipped++; continue; }
         errors.push(`FITID ${txn.fitid}: ${bankErr.message}`);
         continue;
@@ -235,8 +339,13 @@ Deno.serve(async (req) => {
 
       const bankTxnId = bankTxn?.id;
 
-      // CREDITS → reconcile with receivables
+      // ════════════════════════════════════════════════════════
+      // CRÉDITOS (dinheiro entrando) → Contas a RECEBER
+      // ════════════════════════════════════════════════════════
       if (txn.amount > 0) {
+        const meio = detectMeioRecebimento(descricao);
+
+        // Try to match with existing vendas (recebiveis)
         const { data: matchVenda } = await supabase
           .from("transacoes_vendas")
           .select("id, valor_bruto")
@@ -261,28 +370,48 @@ Deno.serve(async (req) => {
             data_recebimento: txn.date,
             origem: "ofx_bancario",
             referencia_externa: txn.fitid,
-            observacao: `Conciliação OFX - ${txn.name || txn.memo}`.trim(),
+            observacao: `Conciliação OFX - ${descricao}`.trim(),
           });
-          matched_recebiveis++;
+          matched_ar++;
         }
-        created++;
+
+        // Always create contas_receber_agregado entry for credits
+        const { error: crErr } = await supabase.from("contas_receber_agregado").insert({
+          clinica_id,
+          competencia: txn.date.slice(0, 7) + "-01", // first of month
+          data_base: txn.date,
+          data_recebimento: txn.date,
+          meio: meio as any,
+          tipo_recebivel: meio === "pix" ? "pix_banco" : "getnet",
+          valor_esperado: txn.amount,
+          valor_recebido: txn.amount,
+          status: "recebido",
+          origem_dado: "banco_credito",
+          origem_ref: { fitid: txn.fitid, banco: bancoRef, descricao },
+        });
+
+        if (crErr) {
+          errors.push(`CR FITID ${txn.fitid}: ${crErr.message}`);
+        } else {
+          creditos_criados++;
+        }
         continue;
       }
 
-      // DEBITS → try to match with pending expense lancamentos (comprovantes)
+      // ════════════════════════════════════════════════════════
+      // DÉBITOS (dinheiro saindo) → Contas a PAGAR
+      // ════════════════════════════════════════════════════════
       const absVal = Math.abs(txn.amount);
-      const toleranciaValor = 0.50; // R$ 0.50 tolerance
-      const toleranciaDias = 3;
+      const classification = classifyTransaction(descricao);
 
-      // Get pending conciliacao_despesas with lancamento data
+      // Try matching with pending conciliacao_despesas
       const { data: pendingConciliacoes } = await supabase
         .from("conciliacao_despesas")
         .select("id, lancamento_id, match_key")
         .eq("clinica_id", clinica_id)
         .eq("status", "pendente");
 
-      // Enrich with lancamento data
-      const pendingMatches: Array<{ id: string; lancamento_id: string; match_key: string; valor: number; data_competencia: string; fornecedor: string; descricao: string }> = [];
+      let matchedExpense = false;
       if (pendingConciliacoes && pendingConciliacoes.length > 0) {
         const lancIds = pendingConciliacoes.map((p: any) => p.lancamento_id);
         const { data: lancs } = await supabase
@@ -290,56 +419,49 @@ Deno.serve(async (req) => {
           .select("id, valor, data_competencia, fornecedor, descricao")
           .in("id", lancIds);
         const lancMap = new Map((lancs || []).map((l: any) => [l.id, l]));
+
+        const txnDate = new Date(txn.date);
+        const txnDescNorm = normalizeText(descricao);
+
         for (const pc of pendingConciliacoes) {
           const l = lancMap.get(pc.lancamento_id);
-          if (l) pendingMatches.push({ id: pc.id, lancamento_id: pc.lancamento_id, match_key: pc.match_key || "", ...l });
-        }
-      }
+          if (!l) continue;
 
-      let matchedExpense = false;
-      if (pendingMatches && pendingMatches.length > 0) {
-        const txnDate = new Date(txn.date);
-        const txnDescNorm = normalizeText(txn.name + " " + txn.memo);
+          const valorDiff = Math.abs(l.valor - absVal);
+          if (valorDiff > 0.50) continue;
 
-        for (const pm of pendingMatches) {
-          const valorDiff = Math.abs(pm.valor - absVal);
-          if (valorDiff > toleranciaValor) continue;
-
-          const lancDate = new Date(pm.data_competencia);
+          const lancDate = new Date(l.data_competencia);
           const daysDiff = Math.abs((txnDate.getTime() - lancDate.getTime()) / 86400000);
-          if (daysDiff > toleranciaDias) continue;
+          if (daysDiff > 3) continue;
 
-          // Text similarity bonus
-          const fornNorm = normalizeText(pm.fornecedor || pm.descricao || "");
+          const fornNorm = normalizeText(l.fornecedor || l.descricao || "");
           const textMatch = fornNorm && txnDescNorm.includes(fornNorm.slice(0, 6));
           const score = textMatch ? 95 : (valorDiff < 0.01 && daysDiff < 1 ? 90 : 70);
-          const metodo = valorDiff < 0.01 && daysDiff < 1 ? "valor_data_exato" : "valor_fuzzy";
 
-          // Conciliate!
           await supabase.from("conciliacao_despesas").update({
             status: valorDiff > 0.01 ? "divergente" : "conciliado",
             transacao_bancaria_id: bankTxnId,
             score,
-            metodo_match: metodo,
+            metodo_match: valorDiff < 0.01 && daysDiff < 1 ? "valor_data_exato" : "valor_fuzzy",
             divergencia: valorDiff,
             conciliado_em: new Date().toISOString(),
             observacao: `Auto-conciliado via OFX. Diff: R$${valorDiff.toFixed(2)}, dias: ${daysDiff.toFixed(0)}`,
-          }).eq("id", pm.id);
+          }).eq("id", pc.id);
 
-          // Update lancamento
           await supabase.from("contas_pagar_lancamentos").update({
             status: "pago",
             data_pagamento: txn.date,
             ofx_transaction_id: txn.fitid,
-          }).eq("id", pm.lancamento_id);
+            banco_referencia: bancoRef,
+          }).eq("id", pc.lancamento_id);
 
-          matched++;
+          matched_ap++;
           matchedExpense = true;
           break;
         }
       }
 
-      // If no pending comprovante match, try existing lancamentos (legacy flow)
+      // Try matching existing lancamentos (legacy flow)
       if (!matchedExpense) {
         const { data: matchLanc } = await supabase
           .from("contas_pagar_lancamentos")
@@ -360,46 +482,57 @@ Deno.serve(async (req) => {
               ofx_transaction_id: txn.fitid,
               status: "pago",
               data_pagamento: txn.date,
+              banco_referencia: bancoRef,
             })
             .eq("id", matchLanc.id);
-          matched++;
+          matched_ap++;
         } else {
-          // Create new unclassified lancamento from bank debit
+          // Create new lancamento with auto-classification
           const { error } = await supabase.from("contas_pagar_lancamentos").insert({
             clinica_id,
-            descricao: txn.name || txn.memo || "Importação OFX",
+            descricao: descricao || "Importação OFX",
+            fornecedor: classification.fornecedor_sugerido || null,
             valor: absVal,
             data_competencia: txn.date,
             data_pagamento: txn.date,
-            status: "a_classificar",
+            status: classification.status as any,
+            tipo_despesa: classification.tipo_despesa as any,
             ofx_transaction_id: txn.fitid,
-            observacao: `Auto-importado OFX. ${txn.memo || ""}`.trim(),
+            banco_referencia: bancoRef,
+            observacao: classification.categoria
+              ? `Auto-classificado: ${classification.categoria}. ${txn.memo || ""}`.trim()
+              : `Auto-importado OFX. ${txn.memo || ""}`.trim(),
           });
           if (error) {
             errors.push(`FITID ${txn.fitid}: ${error.message}`);
           } else {
-            created++;
+            debitos_criados++;
           }
         }
       }
     }
 
-    const imported_count = created + matched + matched_recebiveis;
-    const duplicates_count = skipped;
+    const imported_count = debitos_criados + creditos_criados + matched_ap + matched_ar;
     const finalStatus = errors.length > 0 ? (imported_count > 0 ? "erro_parcial" : "erro") : "sucesso";
 
     // ── Update import_run ──────────────────────────────────────
     await supabase.from("import_runs").update({
       status: finalStatus,
-      registros_criados: created + matched_recebiveis,
-      registros_atualizados: matched,
+      registros_criados: debitos_criados + creditos_criados,
+      registros_atualizados: matched_ap + matched_ar,
       registros_ignorados: skipped,
       erros: errors,
-      detalhes: { matched_recebiveis, matched_lancamentos: matched, created_lancamentos: created },
+      detalhes: {
+        debitos_criados,
+        creditos_criados,
+        matched_ap,
+        matched_ar,
+        banco: bancoRef,
+      },
       finished_at: new Date().toISOString(),
     }).eq("id", importRunId);
 
-    // ── Log in integracao_logs ──────────────────────────────────
+    // ── Log ────────────────────────────────────────────────────
     await supabase.from("integracao_logs").insert({
       clinica_id,
       integracao: "import-ofx",
@@ -409,20 +542,26 @@ Deno.serve(async (req) => {
       inicio: new Date().toISOString(),
       fim: new Date().toISOString(),
       registros_processados: transactions.length,
-      registros_criados: created + matched_recebiveis,
-      registros_atualizados: matched,
+      registros_criados: debitos_criados + creditos_criados,
+      registros_atualizados: matched_ap + matched_ar,
       registros_ignorados: skipped,
-      detalhes: { filename, period_start, period_end, content_type: contentType.split(";")[0] },
+      detalhes: { filename, period_start, period_end, banco: bancoRef },
       erros: errors.length > 0 ? errors : null,
     });
 
     return jsonResponse({
       ok: true,
       imported_count,
-      duplicates_count,
+      duplicates_count: skipped,
+      debitos_criados,
+      creditos_criados,
+      matched_ap,
+      matched_ar,
+      banco: bancoRef,
       period_start,
       period_end,
       import_run_id: importRunId,
+      errors: errors.length > 0 ? errors : undefined,
     });
   } catch (e) {
     console.error("import-ofx error:", e);
