@@ -23,9 +23,21 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
-function safeError(e: unknown): { message: string; name: string; stack_first_300: string } {
+function safeError(e: unknown): { message: string; name: string; code?: string; details?: string; hint?: string; stack_first_300: string } {
   if (e instanceof Error) {
     return { message: e.message, name: e.name, stack_first_300: (e.stack || "").slice(0, 300) };
+  }
+  // Handle Supabase PostgrestError (plain object with message, details, hint, code)
+  if (e && typeof e === "object") {
+    const obj = e as Record<string, unknown>;
+    return {
+      message: typeof obj.message === "string" ? obj.message : JSON.stringify(obj),
+      name: (typeof obj.name === "string" ? obj.name : "SupabaseError"),
+      code: typeof obj.code === "string" ? obj.code : undefined,
+      details: typeof obj.details === "string" ? obj.details : undefined,
+      hint: typeof obj.hint === "string" ? obj.hint : undefined,
+      stack_first_300: "",
+    };
   }
   return { message: String(e), name: "UnknownError", stack_first_300: "" };
 }
@@ -298,7 +310,12 @@ ${tipo ? `Tipo: "${tipo}"` : ""}`;
       console.warn(`forma_pagamento normalizada: "${extracted.forma_pagamento}" → "outros" (raw salvo)`);
     }
 
-    // Create lançamento
+    // Normalize canal_pagamento
+    const validCanais = new Set(["qrcode","chave_celular","chave_cnpj","maquininha","boleto","deposito","outro"]);
+    const canalRaw = (extracted.canal_pagamento || "").toLowerCase().trim();
+    const canalPagamento = validCanais.has(canalRaw) ? canalRaw : null;
+
+    // Create lançamento — comprovante NÃO confirma pagamento, fica pendente de conciliação com extrato
     const { data: lancamento, error: lancErr } = await supabase
       .from("contas_pagar_lancamentos")
       .insert({
@@ -308,22 +325,24 @@ ${tipo ? `Tipo: "${tipo}"` : ""}`;
         fornecedor: extracted.fornecedor || null,
         valor: extracted.valor || 0,
         data_competencia: extracted.data_pagamento || new Date().toISOString().split("T")[0],
-        data_pagamento: extracted.data_pagamento || null,
+        data_vencimento: extracted.data_pagamento || null,
+        data_pagamento: null, // pendente conciliação com extrato bancário
         forma_pagamento: formaPag,
         forma_pagamento_raw: formaPagRaw,
-        canal_pagamento: extracted.canal_pagamento || null,
+        canal_pagamento: canalPagamento,
         banco_referencia: extracted.banco_referencia || null,
         comprovante_id,
         tipo_despesa: extracted.tipo_custo === "fixo" ? "fixo" : "variavel",
         status: planoContasId ? "classificado" : "a_classificar",
-        observacao: `Comprovante AI. Confiança: ${extracted.confianca || "N/A"}%`,
+        observacao: `Comprovante AI (pendente conciliação). Confiança: ${extracted.confianca || "N/A"}%`,
       })
       .select("id")
       .single();
 
     if (lancErr) {
-      console.error("Lancamento error:", safeError(lancErr));
-      return jsonResponse({ error: `Erro ao criar lançamento: ${lancErr.message}` }, 500);
+      const errInfo = safeError(lancErr);
+      console.error("Lancamento error:", errInfo);
+      return jsonResponse({ error: `Erro ao criar lançamento: ${errInfo.message}`, details: errInfo.details, code: errInfo.code, hint: errInfo.hint }, 500);
     }
 
     await supabase.from("comprovantes").update({ lancamento_id: lancamento.id }).eq("id", comprovante_id);
