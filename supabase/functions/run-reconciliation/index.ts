@@ -759,7 +759,67 @@ async function reconcileRecebiveisGetnet(
   return stats;
 }
 
-// ─── Step 6: Getnet Detalhado ↔ Feegow Vendas ──────────────────
+// ─── Step 6b: Detalhado ↔ Resumo (composition) ─────────────────
+async function reconcileDetalhadoResumo(
+  supabase: any,
+  clinicaId: string
+): Promise<{ vinculados: number; erros: string[] }> {
+  const stats = { vinculados: 0, erros: [] as string[] };
+
+  // Load resumo records without linked detalhados
+  const { data: resumos } = await supabase
+    .from("getnet_recebiveis_resumo")
+    .select("id, data_vencimento, bandeira_modalidade, valor_liquido")
+    .eq("clinica_id", clinicaId);
+
+  if (!resumos || resumos.length === 0) return stats;
+
+  // Load all detalhado records
+  const { data: detalhados } = await supabase
+    .from("getnet_recebiveis_detalhado")
+    .select("id, data_vencimento, bandeira_modalidade, valor_liquido, resumo_id")
+    .eq("clinica_id", clinicaId);
+
+  if (!detalhados || detalhados.length === 0) return stats;
+
+  // Group detalhados by (data_vencimento, bandeira_normalizada) that are not yet linked
+  const unlinked = detalhados.filter((d: any) => !d.resumo_id);
+  const groupedDet = new Map<string, any[]>();
+  for (const d of unlinked) {
+    const key = `${d.data_vencimento}|${(d.bandeira_modalidade || "").toUpperCase().trim()}`;
+    if (!groupedDet.has(key)) groupedDet.set(key, []);
+    groupedDet.get(key)!.push(d);
+  }
+
+  for (const resumo of resumos as any[]) {
+    const key = `${resumo.data_vencimento}|${(resumo.bandeira_modalidade || "").toUpperCase().trim()}`;
+    const candidates = groupedDet.get(key);
+    if (!candidates || candidates.length === 0) continue;
+
+    // Sum detalhado values and compare to resumo
+    const sumLiq = candidates.reduce((s: number, d: any) => s + (d.valor_liquido || 0), 0);
+    const diff = Math.abs(sumLiq - resumo.valor_liquido);
+
+    // If sum matches within tolerance, link them
+    if (diff <= 1.0) {
+      const ids = candidates.map((d: any) => d.id);
+      for (const id of ids) {
+        const { error } = await supabase
+          .from("getnet_recebiveis_detalhado")
+          .update({ resumo_id: resumo.id })
+          .eq("id", id);
+        if (error) stats.erros.push(`Det ${id}: ${error.message}`);
+        else stats.vinculados++;
+      }
+      // Remove from candidates so they're not reused
+      groupedDet.delete(key);
+    }
+  }
+
+  return stats;
+}
+
+// ─── Step 7: Getnet Detalhado ↔ Feegow Vendas ──────────────────
 async function reconcileVendasGateway(
   supabase: any,
   clinicaId: string,
@@ -983,6 +1043,7 @@ Deno.serve(async (req) => {
     let expenseStats = { conciliados: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
     let recebiveisStats = { conciliados: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
     let vendasGwStats = { conciliados: 0, divergentes: 0, pendentes: 0, cobertura_pct: 0, erros: [] as string[] };
+    let composicaoStats = { vinculados: 0, erros: [] as string[] };
 
     if (!dryRun) {
       for (const match of allMatches) {
@@ -1032,6 +1093,9 @@ Deno.serve(async (req) => {
       // Step 6: Banco ↔ Getnet Recebíveis (RESUMO)
       recebiveisStats = await reconcileRecebiveisGetnet(supabase, clinicaId, creditos);
 
+      // Step 6b: Detalhado ↔ Resumo (composition)
+      composicaoStats = await reconcileDetalhadoResumo(supabase, clinicaId);
+
       // Step 7: Getnet Detalhado ↔ Feegow Vendas
       vendasGwStats = await reconcileVendasGateway(supabase, clinicaId, dateStart, dateEnd);
     }
@@ -1061,6 +1125,7 @@ Deno.serve(async (req) => {
         },
         triplo: tripleMatches.length,
         total_persisted: persisted,
+        composicao_detalhado_resumo: composicaoStats,
       },
       debitos_automaticos: debitoStats,
       despesas: {

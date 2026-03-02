@@ -101,6 +101,22 @@ function detectTipoFromHeaders(headers: string[]): string | null {
   return null;
 }
 
+// ─── Detect if CSV is a recebíveis layout (not vendas) ──────────
+function isRecebiveisLayout(headers: string[]): string | null {
+  const joined = headers.join("|").toUpperCase();
+  // DETALHADO: has TIPO DE LANÇAMENTO + VALOR DA VENDA + NSU
+  if ((joined.includes("NSU") || joined.includes("COMPROVANTE DE VENDA")) &&
+      joined.includes("VALOR DA VENDA") && joined.includes("TIPO DE LAN")) return "detalhado";
+  // RESUMO: has STATUS + RECEBIMENTO/BANCO + no VALOR DA VENDA
+  if (joined.includes("STATUS") && (joined.includes("RECEBIMENTO") || joined.includes("BANCO")) &&
+      !joined.includes("VALOR DA VENDA") && !joined.includes("ID TRANSAÇÃO PIX") &&
+      !joined.includes("ID TRANSACAO PIX")) return "resumo";
+  // SINTÉTICO: fewer cols, aggregated
+  if (headers.length <= 14 && joined.includes("BANDEIRA") && !joined.includes("NSU") &&
+      !joined.includes("AUTORIZAÇÃO") && !joined.includes("ID TRANSAÇÃO PIX")) return "sintetico";
+  return null;
+}
+
 // ─── Parsed types ───────────────────────────────────────────────
 interface ParsedCartao {
   tipo_extrato: "cartao";
@@ -281,7 +297,28 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "CSV vazio ou sem dados" }, 400);
     }
 
-    // ── Auto-detect tipo ───────────────────────────────────────
+    // ── Check if this is a recebíveis layout → forward to import-getnet-recebiveis ──
+    const recebiveisLayout = isRecebiveisLayout(rows[0]);
+    if (recebiveisLayout) {
+      console.log(`Detected recebíveis layout: ${recebiveisLayout}, forwarding to import-getnet-recebiveis`);
+      const fwdResp = await fetch(`${supabaseUrl}/functions/v1/import-getnet-recebiveis`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          clinica_id,
+          csv_content: csvContent,
+          filename,
+          layout: recebiveisLayout,
+        }),
+      });
+      const fwdData = await fwdResp.json();
+      return jsonResponse(fwdData, fwdResp.status);
+    }
+
+    // ── Auto-detect tipo (vendas only at this point) ───────────
     if (!tipo_extrato) {
       tipo_extrato = detectTipoFromFilename(filename);
     }

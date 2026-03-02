@@ -1905,6 +1905,7 @@ export type Database = {
           mes_ref: string
           nsu: string | null
           raw_hash: string | null
+          resumo_id: string | null
           terminal_logico: string | null
           tipo_lancamento: string | null
           valor_liquidado: number | null
@@ -1927,6 +1928,7 @@ export type Database = {
           mes_ref: string
           nsu?: string | null
           raw_hash?: string | null
+          resumo_id?: string | null
           terminal_logico?: string | null
           tipo_lancamento?: string | null
           valor_liquidado?: number | null
@@ -1949,6 +1951,7 @@ export type Database = {
           mes_ref?: string
           nsu?: string | null
           raw_hash?: string | null
+          resumo_id?: string | null
           terminal_logico?: string | null
           tipo_lancamento?: string | null
           valor_liquidado?: number | null
@@ -1968,6 +1971,13 @@ export type Database = {
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "getnet_recebiveis_detalhado_resumo_id_fkey"
+            columns: ["resumo_id"]
+            isOneToOne: false
+            referencedRelation: "getnet_recebiveis_resumo"
             referencedColumns: ["id"]
           },
         ]
