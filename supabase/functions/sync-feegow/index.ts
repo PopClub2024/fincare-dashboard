@@ -274,6 +274,7 @@ async function syncPeriod(
     const newPatients = new Map<string, string>();
     const vendaBatch: any[] = [];
     const itemBatch: any[] = [];
+    const operacaoBatch: any[] = [];
     const seenFeegow = new Set<string>();
 
     // Debug: log first appt and sale structure
@@ -404,6 +405,26 @@ async function syncPeriod(
         convenio: convenioNome,
       });
 
+      // Also populate operacao_producao (granular)
+      const opRow = {
+        clinica_id: clinicaId,
+        feegow_agendamento_id: feegowId,
+        data_competencia: dataComp,
+        tipo: "consulta" as const,
+        procedimento_nome: procNome,
+        procedimento_id: appt.procedimento_id ? String(appt.procedimento_id) : null,
+        especialidade,
+        medico_id: medicoId,
+        paciente_id: pacienteId,
+        valor_bruto: valorBruto,
+        desconto: 0,
+        valor_liquido: valorBruto,
+        status_presenca: statusPresenca as any,
+        forma_pagamento_original: null as string | null,
+        feegow_refs: { agendamento_id: feegowId, invoice_id: invoiceId },
+      };
+      operacaoBatch.push(opRow);
+
       vendaBatch.push({
         clinica_id: clinicaId,
         feegow_id: feegowId,
@@ -518,7 +539,14 @@ async function syncPeriod(
       }
     }
 
-    stats.detalhes = { ...stats.detalhes, dateStart, dateEnd, total_vendas: vendaBatch.length, total_items: itemBatch.length };
+    // Upsert operacao_producao (granular)
+    for (let i = 0; i < operacaoBatch.length; i += BATCH) {
+      const batch = operacaoBatch.slice(i, i + BATCH);
+      const { error } = await supabase.from("operacao_producao").upsert(batch, { onConflict: "clinica_id,feegow_agendamento_id" });
+      if (error) stats.erros.push(`operacao_producao: ${error.message}`);
+    }
+
+    stats.detalhes = { ...stats.detalhes, dateStart, dateEnd, total_vendas: vendaBatch.length, total_items: itemBatch.length, total_operacao: operacaoBatch.length };
     await finishLog(supabase, logId, stats.erros.length > 0 ? "erro_parcial" : "sucesso", stats);
   } catch (e: any) {
     stats.erros.push(e.message);

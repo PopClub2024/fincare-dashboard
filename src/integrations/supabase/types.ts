@@ -649,6 +649,53 @@ export type Database = {
           },
         ]
       }
+      conciliacao_receitas: {
+        Row: {
+          camada: Database["public"]["Enums"]["camada_conciliacao"]
+          clinica_id: string
+          competencia: string
+          created_at: string
+          data_liquidacao: string | null
+          id: string
+          motivo_divergencia: string | null
+          refs: Json | null
+          score: number | null
+          status: Database["public"]["Enums"]["status_conciliacao_receita"]
+        }
+        Insert: {
+          camada: Database["public"]["Enums"]["camada_conciliacao"]
+          clinica_id: string
+          competencia: string
+          created_at?: string
+          data_liquidacao?: string | null
+          id?: string
+          motivo_divergencia?: string | null
+          refs?: Json | null
+          score?: number | null
+          status?: Database["public"]["Enums"]["status_conciliacao_receita"]
+        }
+        Update: {
+          camada?: Database["public"]["Enums"]["camada_conciliacao"]
+          clinica_id?: string
+          competencia?: string
+          created_at?: string
+          data_liquidacao?: string | null
+          id?: string
+          motivo_divergencia?: string | null
+          refs?: Json | null
+          score?: number | null
+          status?: Database["public"]["Enums"]["status_conciliacao_receita"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conciliacao_receitas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conciliacao_vendas_gateway: {
         Row: {
           clinica_id: string
@@ -1008,6 +1055,74 @@ export type Database = {
           },
         ]
       }
+      contas_receber_agregado: {
+        Row: {
+          bandeira: string | null
+          clinica_id: string
+          competencia: string
+          conciliacao_id: string | null
+          created_at: string
+          data_base: string | null
+          data_prevista_recebimento: string | null
+          data_recebimento: string | null
+          id: string
+          meio: Database["public"]["Enums"]["meio_recebimento"]
+          nf_id: string | null
+          origem_ref: Json | null
+          status: Database["public"]["Enums"]["status_recebivel_agg"]
+          tipo_recebivel: Database["public"]["Enums"]["tipo_recebivel"]
+          updated_at: string
+          valor_esperado: number
+          valor_recebido: number
+        }
+        Insert: {
+          bandeira?: string | null
+          clinica_id: string
+          competencia: string
+          conciliacao_id?: string | null
+          created_at?: string
+          data_base?: string | null
+          data_prevista_recebimento?: string | null
+          data_recebimento?: string | null
+          id?: string
+          meio: Database["public"]["Enums"]["meio_recebimento"]
+          nf_id?: string | null
+          origem_ref?: Json | null
+          status?: Database["public"]["Enums"]["status_recebivel_agg"]
+          tipo_recebivel: Database["public"]["Enums"]["tipo_recebivel"]
+          updated_at?: string
+          valor_esperado?: number
+          valor_recebido?: number
+        }
+        Update: {
+          bandeira?: string | null
+          clinica_id?: string
+          competencia?: string
+          conciliacao_id?: string | null
+          created_at?: string
+          data_base?: string | null
+          data_prevista_recebimento?: string | null
+          data_recebimento?: string | null
+          id?: string
+          meio?: Database["public"]["Enums"]["meio_recebimento"]
+          nf_id?: string | null
+          origem_ref?: Json | null
+          status?: Database["public"]["Enums"]["status_recebivel_agg"]
+          tipo_recebivel?: Database["public"]["Enums"]["tipo_recebivel"]
+          updated_at?: string
+          valor_esperado?: number
+          valor_recebido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contas_receber_agregado_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       convenio_faturamentos_nf: {
         Row: {
           clinica_id: string
@@ -1279,6 +1394,7 @@ export type Database = {
           ativo: boolean
           clinica_id: string
           created_at: string
+          credenciador_pagador: string | null
           feegow_id: string | null
           id: string
           nome: string
@@ -1290,6 +1406,7 @@ export type Database = {
           ativo?: boolean
           clinica_id: string
           created_at?: string
+          credenciador_pagador?: string | null
           feegow_id?: string | null
           id?: string
           nome: string
@@ -1301,6 +1418,7 @@ export type Database = {
           ativo?: boolean
           clinica_id?: string
           created_at?: string
+          credenciador_pagador?: string | null
           feegow_id?: string | null
           id?: string
           nome?: string
@@ -1314,6 +1432,90 @@ export type Database = {
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      convenios_nf: {
+        Row: {
+          banco_tx_id: string | null
+          clinica_id: string
+          competencia: string
+          convenio_id: string
+          created_at: string
+          credenciador_pagador: string | null
+          data_emissao: string | null
+          data_envio: string | null
+          id: string
+          motivo_glosa: string | null
+          numero_nf: string | null
+          observacoes: string | null
+          periodo_atendimentos_fim: string | null
+          periodo_atendimentos_inicio: string | null
+          status: Database["public"]["Enums"]["status_nf_convenio"]
+          updated_at: string
+          valor_esperado: number
+          valor_faturado: number
+          valor_glosado: number
+          valor_recebido: number
+        }
+        Insert: {
+          banco_tx_id?: string | null
+          clinica_id: string
+          competencia: string
+          convenio_id: string
+          created_at?: string
+          credenciador_pagador?: string | null
+          data_emissao?: string | null
+          data_envio?: string | null
+          id?: string
+          motivo_glosa?: string | null
+          numero_nf?: string | null
+          observacoes?: string | null
+          periodo_atendimentos_fim?: string | null
+          periodo_atendimentos_inicio?: string | null
+          status?: Database["public"]["Enums"]["status_nf_convenio"]
+          updated_at?: string
+          valor_esperado?: number
+          valor_faturado?: number
+          valor_glosado?: number
+          valor_recebido?: number
+        }
+        Update: {
+          banco_tx_id?: string | null
+          clinica_id?: string
+          competencia?: string
+          convenio_id?: string
+          created_at?: string
+          credenciador_pagador?: string | null
+          data_emissao?: string | null
+          data_envio?: string | null
+          id?: string
+          motivo_glosa?: string | null
+          numero_nf?: string | null
+          observacoes?: string | null
+          periodo_atendimentos_fim?: string | null
+          periodo_atendimentos_inicio?: string | null
+          status?: Database["public"]["Enums"]["status_nf_convenio"]
+          updated_at?: string
+          valor_esperado?: number
+          valor_faturado?: number
+          valor_glosado?: number
+          valor_recebido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "convenios_nf_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "convenios_nf_convenio_id_fkey"
+            columns: ["convenio_id"]
+            isOneToOne: false
+            referencedRelation: "convenios"
             referencedColumns: ["id"]
           },
         ]
@@ -2768,6 +2970,81 @@ export type Database = {
           },
         ]
       }
+      operacao_producao: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          data_competencia: string
+          desconto: number
+          especialidade: string | null
+          feegow_agendamento_id: string | null
+          feegow_refs: Json | null
+          forma_pagamento_original: string | null
+          id: string
+          medico_id: string | null
+          paciente_id: string | null
+          procedimento_id: string | null
+          procedimento_nome: string | null
+          status_presenca: Database["public"]["Enums"]["status_presenca_op"]
+          tipo: Database["public"]["Enums"]["tipo_operacao"]
+          valor_bruto: number
+          valor_liquido: number
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          data_competencia: string
+          desconto?: number
+          especialidade?: string | null
+          feegow_agendamento_id?: string | null
+          feegow_refs?: Json | null
+          forma_pagamento_original?: string | null
+          id?: string
+          medico_id?: string | null
+          paciente_id?: string | null
+          procedimento_id?: string | null
+          procedimento_nome?: string | null
+          status_presenca?: Database["public"]["Enums"]["status_presenca_op"]
+          tipo?: Database["public"]["Enums"]["tipo_operacao"]
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          data_competencia?: string
+          desconto?: number
+          especialidade?: string | null
+          feegow_agendamento_id?: string | null
+          feegow_refs?: Json | null
+          forma_pagamento_original?: string | null
+          id?: string
+          medico_id?: string | null
+          paciente_id?: string | null
+          procedimento_id?: string | null
+          procedimento_nome?: string | null
+          status_presenca?: Database["public"]["Enums"]["status_presenca_op"]
+          tipo?: Database["public"]["Enums"]["tipo_operacao"]
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operacao_producao_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operacao_producao_medico_id_fkey"
+            columns: ["medico_id"]
+            isOneToOne: false
+            referencedRelation: "medicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pacientes: {
         Row: {
           clinica_id: string
@@ -4130,6 +4407,11 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "gestor" | "operador_caixa" | "visualizador"
+      camada_conciliacao:
+        | "feegow_getnet_venda"
+        | "getnet_recebivel_banco"
+        | "convenio_nf_banco"
+        | "pix_banco"
       canal_pagamento:
         | "qrcode"
         | "chave_celular"
@@ -4161,6 +4443,12 @@ export type Database = {
         | "exame"
         | "prestacao_servicos"
         | "outros"
+      meio_recebimento:
+        | "cartao_credito"
+        | "cartao_debito"
+        | "pix"
+        | "dinheiro"
+        | "convenio"
       origem_pagamento: "extrato" | "manual"
       origem_preco: "importado_planilha" | "manual" | "sync_feegow"
       severidade_alerta: "info" | "warning" | "critical"
@@ -4168,6 +4456,7 @@ export type Database = {
       status_autopilot: "sucesso" | "erro" | "parcial" | "em_andamento"
       status_comprovante: "pendente" | "processado" | "erro" | "rejeitado"
       status_conciliacao: "pendente" | "conciliado" | "divergente"
+      status_conciliacao_receita: "conciliado" | "pendente" | "divergente"
       status_conta: "pendente" | "pago" | "vencido" | "cancelado"
       status_imposto: "aberto" | "parcial" | "pago"
       status_integracao: "ativo" | "inativo" | "erro"
@@ -4177,6 +4466,14 @@ export type Database = {
         | "pago"
         | "cancelado"
         | "pendente_conciliacao"
+        | "divergente"
+      status_nf_convenio:
+        | "rascunho"
+        | "enviada"
+        | "a_receber"
+        | "paga"
+        | "glosa_parcial"
+        | "glosa_total"
         | "divergente"
       status_pagamento_nf:
         | "a_emitir"
@@ -4195,8 +4492,18 @@ export type Database = {
         | "em_espera"
         | "em_atendimento"
         | "cancelado_paciente"
+      status_presenca_op:
+        | "agendado"
+        | "confirmado"
+        | "em_espera"
+        | "em_atendimento"
+        | "atendido"
+        | "faltou"
+        | "cancelado"
+        | "cancelado_paciente"
       status_rascunho: "rascunho" | "aprovado" | "publicado" | "cancelado"
       status_recebimento: "a_receber" | "recebido" | "inadimplente" | "glosado"
+      status_recebivel_agg: "pendente" | "parcial" | "recebido" | "divergente"
       status_recurso_glosa:
         | "nao_iniciado"
         | "em_andamento"
@@ -4218,8 +4525,10 @@ export type Database = {
         | "metas"
         | "resumo_diario"
         | "resumo_mensal"
+      tipo_operacao: "consulta" | "exame" | "servico"
       tipo_pagador: "particular" | "convenio"
       tipo_procedimento: "consulta" | "exame" | "procedimento" | "servico"
+      tipo_recebivel: "getnet" | "pix_banco" | "dinheiro" | "convenio_nf"
       tipo_sync_feegow: "sync_procedimentos" | "update_precos"
       trigger_autopilot:
         | "feegow_sync"
@@ -4355,6 +4664,12 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "gestor", "operador_caixa", "visualizador"],
+      camada_conciliacao: [
+        "feegow_getnet_venda",
+        "getnet_recebivel_banco",
+        "convenio_nf_banco",
+        "pix_banco",
+      ],
       canal_pagamento: [
         "qrcode",
         "chave_celular",
@@ -4390,6 +4705,13 @@ export const Constants = {
         "prestacao_servicos",
         "outros",
       ],
+      meio_recebimento: [
+        "cartao_credito",
+        "cartao_debito",
+        "pix",
+        "dinheiro",
+        "convenio",
+      ],
       origem_pagamento: ["extrato", "manual"],
       origem_preco: ["importado_planilha", "manual", "sync_feegow"],
       severidade_alerta: ["info", "warning", "critical"],
@@ -4397,6 +4719,7 @@ export const Constants = {
       status_autopilot: ["sucesso", "erro", "parcial", "em_andamento"],
       status_comprovante: ["pendente", "processado", "erro", "rejeitado"],
       status_conciliacao: ["pendente", "conciliado", "divergente"],
+      status_conciliacao_receita: ["conciliado", "pendente", "divergente"],
       status_conta: ["pendente", "pago", "vencido", "cancelado"],
       status_imposto: ["aberto", "parcial", "pago"],
       status_integracao: ["ativo", "inativo", "erro"],
@@ -4406,6 +4729,15 @@ export const Constants = {
         "pago",
         "cancelado",
         "pendente_conciliacao",
+        "divergente",
+      ],
+      status_nf_convenio: [
+        "rascunho",
+        "enviada",
+        "a_receber",
+        "paga",
+        "glosa_parcial",
+        "glosa_total",
         "divergente",
       ],
       status_pagamento_nf: [
@@ -4427,8 +4759,19 @@ export const Constants = {
         "em_atendimento",
         "cancelado_paciente",
       ],
+      status_presenca_op: [
+        "agendado",
+        "confirmado",
+        "em_espera",
+        "em_atendimento",
+        "atendido",
+        "faltou",
+        "cancelado",
+        "cancelado_paciente",
+      ],
       status_rascunho: ["rascunho", "aprovado", "publicado", "cancelado"],
       status_recebimento: ["a_receber", "recebido", "inadimplente", "glosado"],
+      status_recebivel_agg: ["pendente", "parcial", "recebido", "divergente"],
       status_recurso_glosa: [
         "nao_iniciado",
         "em_andamento",
@@ -4452,8 +4795,10 @@ export const Constants = {
         "resumo_diario",
         "resumo_mensal",
       ],
+      tipo_operacao: ["consulta", "exame", "servico"],
       tipo_pagador: ["particular", "convenio"],
       tipo_procedimento: ["consulta", "exame", "procedimento", "servico"],
+      tipo_recebivel: ["getnet", "pix_banco", "dinheiro", "convenio_nf"],
       tipo_sync_feegow: ["sync_procedimentos", "update_precos"],
       trigger_autopilot: [
         "feegow_sync",

@@ -7,6 +7,7 @@ import ConvenioFaturamento from "@/components/convenios/ConvenioFaturamento";
 import ConvenioProducao from "@/components/convenios/ConvenioProducao";
 import ConvenioGlosas from "@/components/convenios/ConvenioGlosas";
 import ConvenioConfiguracoes from "@/components/convenios/ConvenioConfiguracoes";
+import ConvenioNFs from "@/components/convenios/ConvenioNFs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -73,9 +74,10 @@ export default function Convenios() {
         <DashboardFilters filters={filters} onFilterChange={setFilters} />
 
         <Tabs defaultValue="visao-geral" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
-            <TabsTrigger value="faturamento">Faturamento / NFs</TabsTrigger>
+            <TabsTrigger value="nfs">NFs / Baixa</TabsTrigger>
+            <TabsTrigger value="faturamento">Faturamento</TabsTrigger>
             <TabsTrigger value="producao">Produção</TabsTrigger>
             <TabsTrigger value="glosas">Glosas</TabsTrigger>
             <TabsTrigger value="configuracoes">Configurações</TabsTrigger>
@@ -83,6 +85,9 @@ export default function Convenios() {
 
           <TabsContent value="visao-geral">
             <ConvenioVisaoGeral dateFrom={filters.dateFrom} dateTo={filters.dateTo} convenioId={convenioId} />
+          </TabsContent>
+          <TabsContent value="nfs">
+            <ConvenioNFs dateFrom={filters.dateFrom} dateTo={filters.dateTo} convenioId={convenioId} />
           </TabsContent>
           <TabsContent value="faturamento">
             <ConvenioFaturamento dateFrom={filters.dateFrom} dateTo={filters.dateTo} convenioId={convenioId} />
