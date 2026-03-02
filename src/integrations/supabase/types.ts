@@ -585,6 +585,131 @@ export type Database = {
           },
         ]
       }
+      conciliacao_recebiveis: {
+        Row: {
+          banco_tx_id: string | null
+          clinica_id: string
+          created_at: string
+          divergencia: number | null
+          getnet_resumo_id: string | null
+          id: string
+          observacao: string | null
+          rule_applied: string | null
+          score: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          banco_tx_id?: string | null
+          clinica_id: string
+          created_at?: string
+          divergencia?: number | null
+          getnet_resumo_id?: string | null
+          id?: string
+          observacao?: string | null
+          rule_applied?: string | null
+          score?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          banco_tx_id?: string | null
+          clinica_id?: string
+          created_at?: string
+          divergencia?: number | null
+          getnet_resumo_id?: string | null
+          id?: string
+          observacao?: string | null
+          rule_applied?: string | null
+          score?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conciliacao_recebiveis_banco_tx_id_fkey"
+            columns: ["banco_tx_id"]
+            isOneToOne: false
+            referencedRelation: "transacoes_bancarias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conciliacao_recebiveis_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conciliacao_recebiveis_getnet_resumo_id_fkey"
+            columns: ["getnet_resumo_id"]
+            isOneToOne: false
+            referencedRelation: "getnet_recebiveis_resumo"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conciliacao_vendas_gateway: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          divergencia: number | null
+          feegow_venda_id: string | null
+          getnet_detalhado_id: string | null
+          id: string
+          match_confidence: string | null
+          rule_applied: string | null
+          score: number | null
+          status: string
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          divergencia?: number | null
+          feegow_venda_id?: string | null
+          getnet_detalhado_id?: string | null
+          id?: string
+          match_confidence?: string | null
+          rule_applied?: string | null
+          score?: number | null
+          status?: string
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          divergencia?: number | null
+          feegow_venda_id?: string | null
+          getnet_detalhado_id?: string | null
+          id?: string
+          match_confidence?: string | null
+          rule_applied?: string | null
+          score?: number | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conciliacao_vendas_gateway_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conciliacao_vendas_gateway_feegow_venda_id_fkey"
+            columns: ["feegow_venda_id"]
+            isOneToOne: false
+            referencedRelation: "transacoes_vendas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conciliacao_vendas_gateway_getnet_detalhado_id_fkey"
+            columns: ["getnet_detalhado_id"]
+            isOneToOne: false
+            referencedRelation: "getnet_recebiveis_detalhado"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conciliacoes: {
         Row: {
           clinica_id: string
@@ -1756,6 +1881,216 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "funcionarios_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      getnet_recebiveis_detalhado: {
+        Row: {
+          arquivo_id: string | null
+          autorizacao: string | null
+          bandeira_modalidade: string | null
+          clinica_id: string
+          created_at: string
+          data_vencimento: string
+          data_venda: string | null
+          descontos: number | null
+          hora_venda: string | null
+          id: string
+          lancamento: string | null
+          meio_pagamento: string | null
+          mes_ref: string
+          nsu: string | null
+          raw_hash: string | null
+          terminal_logico: string | null
+          tipo_lancamento: string | null
+          valor_liquidado: number | null
+          valor_liquido: number
+          valor_venda: number | null
+        }
+        Insert: {
+          arquivo_id?: string | null
+          autorizacao?: string | null
+          bandeira_modalidade?: string | null
+          clinica_id: string
+          created_at?: string
+          data_vencimento: string
+          data_venda?: string | null
+          descontos?: number | null
+          hora_venda?: string | null
+          id?: string
+          lancamento?: string | null
+          meio_pagamento?: string | null
+          mes_ref: string
+          nsu?: string | null
+          raw_hash?: string | null
+          terminal_logico?: string | null
+          tipo_lancamento?: string | null
+          valor_liquidado?: number | null
+          valor_liquido?: number
+          valor_venda?: number | null
+        }
+        Update: {
+          arquivo_id?: string | null
+          autorizacao?: string | null
+          bandeira_modalidade?: string | null
+          clinica_id?: string
+          created_at?: string
+          data_vencimento?: string
+          data_venda?: string | null
+          descontos?: number | null
+          hora_venda?: string | null
+          id?: string
+          lancamento?: string | null
+          meio_pagamento?: string | null
+          mes_ref?: string
+          nsu?: string | null
+          raw_hash?: string | null
+          terminal_logico?: string | null
+          tipo_lancamento?: string | null
+          valor_liquidado?: number | null
+          valor_liquido?: number
+          valor_venda?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "getnet_recebiveis_detalhado_arquivo_id_fkey"
+            columns: ["arquivo_id"]
+            isOneToOne: false
+            referencedRelation: "import_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "getnet_recebiveis_detalhado_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      getnet_recebiveis_resumo: {
+        Row: {
+          agencia: string | null
+          arquivo_id: string | null
+          banco: string | null
+          bandeira_modalidade: string | null
+          clinica_id: string
+          conta_corrente: string | null
+          created_at: string
+          data_vencimento: string
+          id: string
+          meio_pagamento: string | null
+          mes_ref: string
+          raw_hash: string | null
+          recebimento: string | null
+          status: string | null
+          valor_liquido: number
+        }
+        Insert: {
+          agencia?: string | null
+          arquivo_id?: string | null
+          banco?: string | null
+          bandeira_modalidade?: string | null
+          clinica_id: string
+          conta_corrente?: string | null
+          created_at?: string
+          data_vencimento: string
+          id?: string
+          meio_pagamento?: string | null
+          mes_ref: string
+          raw_hash?: string | null
+          recebimento?: string | null
+          status?: string | null
+          valor_liquido?: number
+        }
+        Update: {
+          agencia?: string | null
+          arquivo_id?: string | null
+          banco?: string | null
+          bandeira_modalidade?: string | null
+          clinica_id?: string
+          conta_corrente?: string | null
+          created_at?: string
+          data_vencimento?: string
+          id?: string
+          meio_pagamento?: string | null
+          mes_ref?: string
+          raw_hash?: string | null
+          recebimento?: string | null
+          status?: string | null
+          valor_liquido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "getnet_recebiveis_resumo_arquivo_id_fkey"
+            columns: ["arquivo_id"]
+            isOneToOne: false
+            referencedRelation: "import_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "getnet_recebiveis_resumo_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      getnet_recebiveis_sintetico: {
+        Row: {
+          arquivo_id: string | null
+          bandeira_modalidade: string | null
+          clinica_id: string
+          created_at: string
+          data_ultima_movimentacao: string | null
+          id: string
+          meio_pagamento: string | null
+          mes_ref: string
+          quantidade: number | null
+          raw_hash: string | null
+          valor_liquido: number
+        }
+        Insert: {
+          arquivo_id?: string | null
+          bandeira_modalidade?: string | null
+          clinica_id: string
+          created_at?: string
+          data_ultima_movimentacao?: string | null
+          id?: string
+          meio_pagamento?: string | null
+          mes_ref: string
+          quantidade?: number | null
+          raw_hash?: string | null
+          valor_liquido?: number
+        }
+        Update: {
+          arquivo_id?: string | null
+          bandeira_modalidade?: string | null
+          clinica_id?: string
+          created_at?: string
+          data_ultima_movimentacao?: string | null
+          id?: string
+          meio_pagamento?: string | null
+          mes_ref?: string
+          quantidade?: number | null
+          raw_hash?: string | null
+          valor_liquido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "getnet_recebiveis_sintetico_arquivo_id_fkey"
+            columns: ["arquivo_id"]
+            isOneToOne: false
+            referencedRelation: "import_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "getnet_recebiveis_sintetico_clinica_id_fkey"
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
