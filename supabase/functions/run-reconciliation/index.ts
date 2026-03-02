@@ -947,7 +947,219 @@ async function reconcileVendasGateway(
   return stats;
 }
 
-// ─── MAIN HANDLER ──────────────────────────────────────────────
+// ─── Step 8: Convenios NF ↔ Banco (Pipeline 3) ─────────────────
+async function reconcileConveniosNF(
+  supabase: any,
+  clinicaId: string,
+  creditos: TransacaoBancaria[],
+  toleranciaValor = 1.0,
+  toleranciaDias = 60
+): Promise<{ conciliados: number; glosa_parcial: number; divergentes: number; pendentes: number; erros: string[] }> {
+  const stats = { conciliados: 0, glosa_parcial: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
+
+  // Load pending NFs
+  const { data: nfs } = await supabase
+    .from("convenios_nf")
+    .select("id, convenio_id, credenciador_pagador, competencia, valor_esperado, valor_recebido, status, convenios(nome, credenciador_pagador)")
+    .eq("clinica_id", clinicaId)
+    .in("status", ["enviada", "a_receber"]);
+
+  if (!nfs || nfs.length === 0) return stats;
+
+  // Get already used bank tx IDs
+  const { data: jaConc } = await supabase
+    .from("convenios_nf")
+    .select("banco_tx_id")
+    .eq("clinica_id", clinicaId)
+    .not("banco_tx_id", "is", null);
+  const usedBancoIds = new Set((jaConc || []).map((r: any) => r.banco_tx_id));
+
+  const availableCreditos = creditos.filter(c => c.status === "pendente" && !usedBancoIds.has(c.id));
+  const usedCreditos = new Set<string>();
+
+  for (const nf of nfs as any[]) {
+    // Build search terms from credenciador_pagador
+    const pagador = (nf.credenciador_pagador || nf.convenios?.credenciador_pagador || nf.convenios?.nome || "").toUpperCase();
+    if (!pagador) { stats.pendentes++; continue; }
+
+    const searchTerms = pagador.split(",").map((s: string) => s.trim().toUpperCase()).filter((s: string) => s.length > 2);
+    if (searchTerms.length === 0) { stats.pendentes++; continue; }
+
+    let best: { tb: TransacaoBancaria; score: number } | null = null;
+
+    for (const tb of availableCreditos) {
+      if (usedCreditos.has(tb.id)) continue;
+      const memo = (tb.descricao || "").toUpperCase();
+
+      // Check if memo matches any search term
+      const memoMatch = searchTerms.some((term: string) => memo.includes(term));
+      if (!memoMatch) continue;
+
+      // Date check: within toleranciaDias of NF
+      const nfDate = nf.competencia;
+      const dias = daysDiff(nfDate, dateOnly(tb.data_transacao));
+      if (dias > toleranciaDias) continue;
+
+      // Value check
+      const valorEsperado = nf.valor_esperado - (nf.valor_recebido || 0);
+      const diff = Math.abs(tb.valor - valorEsperado);
+      const pctDiff = valorEsperado > 0 ? (diff / valorEsperado) * 100 : 100;
+
+      let score = 0;
+      if (diff <= 0.10) score += 60;
+      else if (diff <= toleranciaValor) score += 50;
+      else if (pctDiff <= 5) score += 40;
+      else if (pctDiff <= 15) score += 25; // possible glosa
+      else continue; // too far
+
+      if (dias <= 5) score += 25;
+      else if (dias <= 30) score += 15;
+      else score += 5;
+
+      score += 10; // memo match bonus
+
+      if (!best || score > best.score) {
+        best = { tb, score };
+      }
+    }
+
+    if (!best) { stats.pendentes++; continue; }
+
+    usedCreditos.add(best.tb.id);
+    const valorEsperado = nf.valor_esperado - (nf.valor_recebido || 0);
+    const valorBanco = best.tb.valor;
+
+    let newStatus: string;
+    let valorGlosado = 0;
+
+    if (Math.abs(valorBanco - valorEsperado) <= toleranciaValor) {
+      // Full payment
+      newStatus = "paga";
+      stats.conciliados++;
+    } else if (valorBanco < valorEsperado) {
+      // Partial - glosa
+      newStatus = "glosa_parcial";
+      valorGlosado = valorEsperado - valorBanco;
+      stats.glosa_parcial++;
+    } else {
+      // Bank > expected → divergent
+      newStatus = "divergente";
+      stats.divergentes++;
+    }
+
+    try {
+      await supabase.from("convenios_nf").update({
+        status: newStatus,
+        valor_recebido: (nf.valor_recebido || 0) + valorBanco,
+        valor_glosado: (nf.valor_glosado || 0) + valorGlosado,
+        banco_tx_id: best.tb.id,
+        updated_at: new Date().toISOString(),
+      }).eq("id", nf.id);
+
+      // Mark bank tx as used
+      await supabase.from("transacoes_bancarias")
+        .update({ status: "conciliado", categoria_auto: `convenio_nf:${nf.id}` })
+        .eq("id", best.tb.id);
+
+      // Create/update contas_receber_agregado for this NF
+      await supabase.from("contas_receber_agregado").upsert({
+        clinica_id: clinicaId,
+        tipo_recebivel: "convenio_nf",
+        competencia: nf.competencia,
+        data_base: nf.competencia,
+        data_recebimento: dateOnly(best.tb.data_transacao),
+        meio: "convenio",
+        valor_esperado: nf.valor_esperado,
+        valor_recebido: (nf.valor_recebido || 0) + valorBanco,
+        status: newStatus === "paga" ? "recebido" : newStatus === "glosa_parcial" ? "parcial" : "divergente",
+        nf_id: nf.id,
+        origem_ref: { banco_tx_id: best.tb.id, convenio_id: nf.convenio_id },
+      }, { onConflict: "id" });
+
+      // Audit trail
+      await supabase.from("conciliacao_receitas").insert({
+        clinica_id: clinicaId,
+        competencia: nf.competencia,
+        data_liquidacao: dateOnly(best.tb.data_transacao),
+        camada: "convenio_nf_banco",
+        status: newStatus === "paga" ? "conciliado" : newStatus === "glosa_parcial" ? "conciliado" : "divergente",
+        score: best.score,
+        motivo_divergencia: newStatus === "divergente" ? `Banco R$${valorBanco} > Esperado R$${valorEsperado}` : valorGlosado > 0 ? `Glosa R$${valorGlosado.toFixed(2)}` : null,
+        refs: { nf_id: nf.id, banco_tx_id: best.tb.id },
+      });
+    } catch (e: any) {
+      stats.erros.push(`NF ${nf.id}: ${e.message}`);
+    }
+  }
+
+  return stats;
+}
+
+// ─── Step 9: Build contas_receber_agregado from Getnet reconciliation ─
+async function buildContasReceberAgregado(
+  supabase: any,
+  clinicaId: string,
+  dateStart: string,
+  dateEnd: string
+): Promise<{ criados: number; erros: string[] }> {
+  const stats = { criados: 0, erros: [] as string[] };
+
+  // Get reconciled recebiveis with bank dates
+  const { data: concRec } = await supabase
+    .from("conciliacao_recebiveis")
+    .select("id, banco_tx_id, getnet_resumo_id, status, score, rule_applied")
+    .eq("clinica_id", clinicaId)
+    .eq("status", "conciliado");
+
+  if (!concRec || concRec.length === 0) return stats;
+
+  for (const rec of concRec as any[]) {
+    // Get resumo details
+    const { data: resumo } = await supabase
+      .from("getnet_recebiveis_resumo")
+      .select("data_vencimento, bandeira_modalidade, meio_pagamento, valor_liquido, mes_ref")
+      .eq("id", rec.getnet_resumo_id)
+      .single();
+
+    if (!resumo) continue;
+
+    // Get bank tx date
+    const { data: bankTx } = await supabase
+      .from("transacoes_bancarias")
+      .select("data_transacao")
+      .eq("id", rec.banco_tx_id)
+      .single();
+
+    const competencia = resumo.mes_ref || resumo.data_vencimento;
+    const meio = resumo.meio_pagamento === "cartao_debito" ? "cartao_debito" : "cartao_credito";
+
+    try {
+      await supabase.from("contas_receber_agregado").insert({
+        clinica_id: clinicaId,
+        tipo_recebivel: "getnet",
+        competencia: competencia,
+        data_base: resumo.data_vencimento,
+        data_recebimento: bankTx?.data_transacao ? dateOnly(bankTx.data_transacao) : null,
+        data_prevista_recebimento: resumo.data_vencimento,
+        meio,
+        bandeira: resumo.bandeira_modalidade,
+        valor_esperado: resumo.valor_liquido,
+        valor_recebido: resumo.valor_liquido,
+        status: "recebido",
+        conciliacao_id: rec.id,
+        origem_ref: { getnet_resumo_id: rec.getnet_resumo_id, banco_tx_id: rec.banco_tx_id },
+      });
+      stats.criados++;
+    } catch (e: any) {
+      // Likely duplicate, skip
+      if (!e.message?.includes("duplicate")) stats.erros.push(e.message);
+    }
+  }
+
+  return stats;
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1044,6 +1256,8 @@ Deno.serve(async (req) => {
     let recebiveisStats = { conciliados: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
     let vendasGwStats = { conciliados: 0, divergentes: 0, pendentes: 0, cobertura_pct: 0, erros: [] as string[] };
     let composicaoStats = { vinculados: 0, erros: [] as string[] };
+    let convenioNfStats = { conciliados: 0, glosa_parcial: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
+    let crAgregadoStats = { criados: 0, erros: [] as string[] };
 
     if (!dryRun) {
       for (const match of allMatches) {
@@ -1098,6 +1312,12 @@ Deno.serve(async (req) => {
 
       // Step 7: Getnet Detalhado ↔ Feegow Vendas
       vendasGwStats = await reconcileVendasGateway(supabase, clinicaId, dateStart, dateEnd);
+
+      // Step 8: Convenios NF ↔ Banco (Pipeline 3)
+      convenioNfStats = await reconcileConveniosNF(supabase, clinicaId, creditos);
+
+      // Step 9: Build contas_receber_agregado
+      crAgregadoStats = await buildContasReceberAgregado(supabase, clinicaId, dateStart, dateEnd);
     }
 
     // ── Summary ──────────────────────────────────────────────
@@ -1126,6 +1346,13 @@ Deno.serve(async (req) => {
         triplo: tripleMatches.length,
         total_persisted: persisted,
         composicao_detalhado_resumo: composicaoStats,
+        convenios_nf: {
+          conciliadas: convenioNfStats.conciliados,
+          glosa_parcial: convenioNfStats.glosa_parcial,
+          divergentes: convenioNfStats.divergentes,
+          pendentes: convenioNfStats.pendentes,
+        },
+        cr_agregado: crAgregadoStats,
       },
       debitos_automaticos: debitoStats,
       despesas: {
@@ -1138,7 +1365,7 @@ Deno.serve(async (req) => {
         vendas_sem_match: vendas.length - matchesVG.length,
         getnet_sem_match: getnetTxs.length -
           new Set([...matchesVG.map((m) => m.getnet_id), ...matchesGB.map((m) => m.getnet_id)]).size,
-        creditos_sem_match: creditos.length - matchesGB.length - recebiveisStats.conciliados,
+        creditos_sem_match: creditos.length - matchesGB.length - recebiveisStats.conciliados - convenioNfStats.conciliados,
         debitos_sem_match: debitos.length - debitoStats.baixados,
       },
       taxas_getnet: {
