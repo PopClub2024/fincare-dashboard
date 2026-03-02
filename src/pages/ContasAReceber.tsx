@@ -42,6 +42,7 @@ interface CrAgregado {
   valor_recebido: number;
   status: string;
   origem_ref: any;
+  origem_dado: string | null;
   nf_id: string | null;
 }
 
@@ -154,6 +155,7 @@ function TabAgregado({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
             valor_recebido: 0,
             status: "pendente",
             origem_ref: null,
+            origem_dado: null,
             nf_id: null,
           };
         }
@@ -200,12 +202,20 @@ function TabAgregado({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
 
   const statusVariant = (s: string) => {
     switch (s) {
-      case "recebido": return "default" as const;
+      case "recebido": case "conciliado": return "default" as const;
       case "pendente": return "outline" as const;
       case "parcial": return "secondary" as const;
       case "divergente": return "destructive" as const;
       default: return "outline" as const;
     }
+  };
+
+  const origemLabel: Record<string, string> = {
+    feegow_caixa: "Feegow Caixa",
+    feegow_invoice: "Feegow Invoice",
+    getnet_vendas: "Getnet",
+    banco_credito: "Banco",
+    manual: "Manual",
   };
 
   return (
@@ -271,47 +281,43 @@ function TabAgregado({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Data Base</TableHead>
-                  <TableHead>Competência</TableHead>
-                  <TableHead>Meio</TableHead>
-                  <TableHead>Bandeira</TableHead>
-                  <TableHead className="text-right">Esperado</TableHead>
-                  <TableHead className="text-right">Recebido</TableHead>
-                  <TableHead>Recebimento</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
+                 <TableRow>
+                   <TableHead>Data Base</TableHead>
+                   <TableHead>Meio</TableHead>
+                   <TableHead>Bandeira</TableHead>
+                   <TableHead className="text-right">Esperado</TableHead>
+                   <TableHead className="text-right">Recebido</TableHead>
+                   <TableHead>Origem</TableHead>
+                   <TableHead>Status</TableHead>
+                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="text-sm whitespace-nowrap">
-                      {r.data_base ? new Date(r.data_base + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm whitespace-nowrap">
-                      {new Date(r.competencia + "T12:00:00").toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        {r.meio === "cartao_credito" || r.meio === "cartao_debito" ? <CreditCard className="h-3.5 w-3.5" /> :
-                         r.meio === "pix" ? <QrCode className="h-3.5 w-3.5" /> :
-                         r.meio === "dinheiro" ? <Banknote className="h-3.5 w-3.5" /> :
-                         <Clock className="h-3.5 w-3.5" />}
-                        <span className="text-xs">{meioLabel[r.meio] || r.meio}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs">{r.bandeira || "—"}</TableCell>
-                    <TableCell className="text-right font-medium">{formatCurrency(r.valor_esperado)}</TableCell>
-                    <TableCell className="text-right font-medium text-emerald-600">
-                      {r.valor_recebido > 0 ? formatCurrency(r.valor_recebido) : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">
-                      {r.data_recebimento ? new Date(r.data_recebimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
-                    </TableCell>
-                  </TableRow>
+                   <TableRow key={r.id}>
+                     <TableCell className="text-sm whitespace-nowrap">
+                       {r.data_base ? new Date(r.data_base + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
+                     </TableCell>
+                     <TableCell>
+                       <div className="flex items-center gap-1.5">
+                         {r.meio === "cartao_credito" || r.meio === "cartao_debito" ? <CreditCard className="h-3.5 w-3.5" /> :
+                          r.meio === "pix" ? <QrCode className="h-3.5 w-3.5" /> :
+                          r.meio === "dinheiro" ? <Banknote className="h-3.5 w-3.5" /> :
+                          <Clock className="h-3.5 w-3.5" />}
+                         <span className="text-xs">{meioLabel[r.meio] || r.meio}</span>
+                       </div>
+                     </TableCell>
+                     <TableCell className="text-xs">{r.bandeira || "—"}</TableCell>
+                     <TableCell className="text-right font-medium">{formatCurrency(r.valor_esperado)}</TableCell>
+                     <TableCell className="text-right font-medium text-emerald-600">
+                       {r.valor_recebido > 0 ? formatCurrency(r.valor_recebido) : "—"}
+                     </TableCell>
+                     <TableCell className="text-xs whitespace-nowrap">
+                       {r.origem_dado ? (origemLabel[r.origem_dado] || r.origem_dado) : "Vendas"}
+                     </TableCell>
+                     <TableCell>
+                       <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
+                     </TableCell>
+                   </TableRow>
                 ))}
               </TableBody>
             </Table>
