@@ -94,8 +94,12 @@ const CLASSIFICATION_RULES: ClassificationRule[] = [
   { pattern: /TED|DOC|TRANSF BANCARIA/i, tipo_despesa: "variavel", categoria: "transferencia" },
 ];
 
-function classifyTransaction(description: string): { tipo_despesa: string; categoria: string; fornecedor_sugerido: string | null; status: string } {
+function classifyTransaction(description: string): { tipo_despesa: string; categoria: string; fornecedor_sugerido: string | null; status: string; is_repasse_medico: boolean } {
   const desc = (description || "").toUpperCase();
+  
+  // Detect medical repasses (PIX to people names, SERVICOS MED, etc.)
+  const isRepasse = /SERVICOS MED|CLINICA MED|MEDIC|DR\.|DRA\.|REPASSE/i.test(desc);
+  
   for (const rule of CLASSIFICATION_RULES) {
     if (rule.pattern.test(desc)) {
       return {
@@ -103,10 +107,61 @@ function classifyTransaction(description: string): { tipo_despesa: string; categ
         categoria: rule.categoria,
         fornecedor_sugerido: rule.fornecedor_sugerido || null,
         status: "classificado",
+        is_repasse_medico: isRepasse,
       };
     }
   }
-  return { tipo_despesa: "variavel", categoria: "", fornecedor_sugerido: null, status: "a_classificar" };
+  return { tipo_despesa: "variavel", categoria: "", fornecedor_sugerido: null, status: "a_classificar", is_repasse_medico: isRepasse };
+}
+
+// ─── Detect competencia_referencia from description ─────────────
+function detectCompetenciaReferencia(description: string, txnDate: string): string | null {
+  const desc = (description || "").toUpperCase();
+  
+  // Pattern: REF MM/YYYY or REF MM/YY
+  const refMatch = desc.match(/REF\.?\s*(\d{2})[\/\-](\d{2,4})/);
+  if (refMatch) {
+    const month = refMatch[1];
+    let year = refMatch[2];
+    if (year.length === 2) year = "20" + year;
+    return `${year}-${month}-01`;
+  }
+  
+  // Pattern: COMP MM/YYYY or COMPETENCIA MM/YYYY
+  const compMatch = desc.match(/COMP(?:ETENCIA)?\.?\s*(\d{2})[\/\-](\d{2,4})/);
+  if (compMatch) {
+    const month = compMatch[1];
+    let year = compMatch[2];
+    if (year.length === 2) year = "20" + year;
+    return `${year}-${month}-01`;
+  }
+  
+  // Pattern: month names (JANEIRO, FEVEREIRO, etc.)
+  const meses: Record<string, string> = {
+    JANEIRO: "01", FEVEREIRO: "02", MARCO: "03", ABRIL: "04",
+    MAIO: "05", JUNHO: "06", JULHO: "07", AGOSTO: "08",
+    SETEMBRO: "09", OUTUBRO: "10", NOVEMBRO: "11", DEZEMBRO: "12",
+    JAN: "01", FEV: "02", MAR: "03", ABR: "04",
+    MAI: "05", JUN: "06", JUL: "07", AGO: "08",
+    SET: "09", OUT: "10", NOV: "11", DEZ: "12",
+  };
+  for (const [nome, num] of Object.entries(meses)) {
+    if (desc.includes(nome)) {
+      // Use the year from the transaction date or description
+      const yearMatch = desc.match(/20\d{2}/);
+      const year = yearMatch ? yearMatch[0] : txnDate.slice(0, 4);
+      return `${year}-${num}-01`;
+    }
+  }
+  
+  // For medical repasses, default to previous month
+  if (/SERVICOS MED|REPASSE|MEDIC/i.test(desc)) {
+    const d = new Date(txnDate);
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().slice(0, 7) + "-01";
+  }
+  
+  return null;
 }
 
 // ─── Detect credit meio_recebimento from description ────────────
@@ -488,6 +543,7 @@ Deno.serve(async (req) => {
           matched_ap++;
         } else {
           // Create new lancamento with auto-classification
+          const compRef = detectCompetenciaReferencia(descricao, txn.date);
           const { error } = await supabase.from("contas_pagar_lancamentos").insert({
             clinica_id,
             descricao: descricao || "Importação OFX",
@@ -499,8 +555,9 @@ Deno.serve(async (req) => {
             tipo_despesa: classification.tipo_despesa as any,
             ofx_transaction_id: txn.fitid,
             banco_referencia: bancoRef,
+            competencia_referencia: compRef,
             observacao: classification.categoria
-              ? `Auto-classificado: ${classification.categoria}. ${txn.memo || ""}`.trim()
+              ? `Auto-classificado: ${classification.categoria}${classification.is_repasse_medico ? ' (repasse médico)' : ''}. ${txn.memo || ""}`.trim()
               : `Auto-importado OFX. ${txn.memo || ""}`.trim(),
           });
           if (error) {
