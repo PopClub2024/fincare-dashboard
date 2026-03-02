@@ -80,6 +80,45 @@ interface ExpenseMatchResult {
   status: "conciliado" | "divergente";
 }
 
+interface GetnetRecebivel {
+  id: string;
+  data_vencimento: string;
+  bandeira_modalidade: string | null;
+  meio_pagamento: string | null;
+  valor_liquido: number;
+  status: string | null;
+  recebimento: string | null;
+}
+
+interface RecebiveisMatchResult {
+  banco_tx_id: string;
+  getnet_resumo_id: string;
+  score: number;
+  rule: string;
+  divergencia: number;
+  status: "conciliado" | "divergente";
+}
+
+interface GetnetDetalhado {
+  id: string;
+  data_venda: string | null;
+  valor_venda: number;
+  meio_pagamento: string | null;
+  nsu: string | null;
+  autorizacao: string | null;
+  tipo_lancamento: string | null;
+  lancamento: string | null;
+}
+
+interface VendaGatewayMatch {
+  getnet_detalhado_id: string;
+  feegow_venda_id: string;
+  score: number;
+  rule: string;
+  divergencia: number;
+  status: "conciliado" | "divergente";
+}
+
 // ─── Helpers ────────────────────────────────────────────────────
 function daysDiff(a: string, b: string): number {
   return Math.abs(
@@ -567,6 +606,287 @@ async function reconcileExpenses(
   return stats;
 }
 
+// ─── Step 5: Banco ↔ Getnet Recebíveis (RESUMO) ────────────────
+async function reconcileRecebiveisGetnet(
+  supabase: any,
+  clinicaId: string,
+  creditos: TransacaoBancaria[],
+  toleranciaValor = 0.50
+): Promise<{ conciliados: number; divergentes: number; pendentes: number; erros: string[] }> {
+  const stats = { conciliados: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
+
+  // Load Getnet recebíveis RESUMO not yet reconciled
+  const { data: recebiveis } = await supabase
+    .from("getnet_recebiveis_resumo")
+    .select("id, data_vencimento, bandeira_modalidade, meio_pagamento, valor_liquido, status, recebimento")
+    .eq("clinica_id", clinicaId);
+
+  if (!recebiveis || recebiveis.length === 0) return stats;
+
+  // Get already reconciled IDs
+  const { data: jaConc } = await supabase
+    .from("conciliacao_recebiveis")
+    .select("banco_tx_id, getnet_resumo_id")
+    .eq("clinica_id", clinicaId)
+    .eq("status", "conciliado");
+
+  const usedBancoIds = new Set((jaConc || []).map((r: any) => r.banco_tx_id));
+  const usedResumoIds = new Set((jaConc || []).map((r: any) => r.getnet_resumo_id));
+
+  // Filter bank credits with GETNET in memo
+  const getnetCreditos = creditos.filter(c =>
+    c.status === "pendente" &&
+    !usedBancoIds.has(c.id) &&
+    normalizeText(c.descricao).includes("getnet")
+  );
+
+  // Exclude antecipação for separate handling
+  const regularCreditos = getnetCreditos.filter(c =>
+    !normalizeText(c.descricao).includes("antecipacao")
+  );
+
+  const usedCreditos = new Set<string>();
+  const usedRecebiveis = new Set<string>();
+  const matches: RecebiveisMatchResult[] = [];
+
+  for (const receb of recebiveis as GetnetRecebivel[]) {
+    if (usedResumoIds.has(receb.id)) continue;
+    if (usedRecebiveis.has(receb.id)) continue;
+
+    let best: { tb: TransacaoBancaria; score: number; div: number; rule: string } | null = null;
+
+    for (const tb of regularCreditos) {
+      if (usedCreditos.has(tb.id)) continue;
+
+      const div = Math.abs(receb.valor_liquido - tb.valor);
+      if (div > toleranciaValor && (receb.valor_liquido > 0 ? div / receb.valor_liquido * 100 : 100) > 2) continue;
+
+      const dias = daysDiff(receb.data_vencimento, dateOnly(tb.data_transacao));
+      if (dias > 3) continue;
+
+      let score = 0;
+      let rule = "";
+
+      // Value (0-60)
+      if (div === 0) { score += 60; rule += "valor_exato "; }
+      else if (div <= 0.10) { score += 55; rule += "valor_centavos "; }
+      else { score += 40; rule += "valor_tolerancia "; }
+
+      // Date (0-25)
+      if (dias === 0) { score += 25; rule += "data_exata "; }
+      else if (dias === 1) { score += 18; rule += "data_d1 "; }
+      else { score += 10; rule += `data_d${dias} `; }
+
+      // Bandeira bonus from memo
+      const memo = normalizeText(tb.descricao);
+      const bandeira = normalizeText(receb.bandeira_modalidade);
+      if (bandeira && memo) {
+        // Extract bandeira keywords
+        const keywords = bandeira.split(" ").filter(w => w.length > 2);
+        for (const kw of keywords) {
+          if (memo.includes(kw)) { score += 10; rule += `bandeira_${kw} `; break; }
+        }
+      }
+
+      // Payment method bonus
+      if (memo.includes("debito") && receb.meio_pagamento === "cartao_debito") {
+        score += 5; rule += "meio_debito ";
+      } else if (memo.includes("credito") && receb.meio_pagamento === "cartao_credito") {
+        score += 5; rule += "meio_credito ";
+      }
+
+      score = Math.max(0, Math.min(100, score));
+      if (score > 50 && (!best || score > best.score)) {
+        best = { tb, score, div, rule: rule.trim() };
+      }
+    }
+
+    if (!best) { stats.pendentes++; continue; }
+
+    const hasAmbiguity = false; // simplified for now
+    usedCreditos.add(best.tb.id);
+    usedRecebiveis.add(receb.id);
+
+    const status = best.score >= 75 && !hasAmbiguity ? "conciliado" : "divergente";
+    matches.push({
+      banco_tx_id: best.tb.id,
+      getnet_resumo_id: receb.id,
+      score: best.score,
+      rule: best.rule,
+      divergencia: best.div,
+      status,
+    });
+
+    if (status === "conciliado") stats.conciliados++;
+    else stats.divergentes++;
+  }
+
+  // Persist
+  for (const m of matches) {
+    try {
+      const { data: existing } = await supabase
+        .from("conciliacao_recebiveis")
+        .select("id")
+        .eq("getnet_resumo_id", m.getnet_resumo_id)
+        .eq("clinica_id", clinicaId)
+        .in("status", ["pendente", "divergente"])
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from("conciliacao_recebiveis").update({
+          banco_tx_id: m.banco_tx_id, status: m.status,
+          score: m.score, rule_applied: m.rule, divergencia: m.divergencia,
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.id);
+      } else {
+        await supabase.from("conciliacao_recebiveis").insert({
+          clinica_id: clinicaId, banco_tx_id: m.banco_tx_id,
+          getnet_resumo_id: m.getnet_resumo_id, status: m.status,
+          score: m.score, rule_applied: m.rule, divergencia: m.divergencia,
+        });
+      }
+
+      if (m.status === "conciliado") {
+        await supabase.from("transacoes_bancarias")
+          .update({ status: "conciliado", categoria_auto: `getnet_recebivel:${m.getnet_resumo_id}` })
+          .eq("id", m.banco_tx_id);
+      }
+    } catch (e) {
+      stats.erros.push(`Recebivel ${m.getnet_resumo_id}: ${e.message}`);
+    }
+  }
+
+  return stats;
+}
+
+// ─── Step 6: Getnet Detalhado ↔ Feegow Vendas ──────────────────
+async function reconcileVendasGateway(
+  supabase: any,
+  clinicaId: string,
+  dateStart: string,
+  dateEnd: string,
+  toleranciaValor = 1.0,
+  toleranciaDias = 2
+): Promise<{ conciliados: number; divergentes: number; pendentes: number; cobertura_pct: number; erros: string[] }> {
+  const stats = { conciliados: 0, divergentes: 0, pendentes: 0, cobertura_pct: 0, erros: [] as string[] };
+
+  // Load Getnet detalhado (vendas only, not negociações)
+  const { data: detalhados } = await supabase
+    .from("getnet_recebiveis_detalhado")
+    .select("id, data_venda, valor_venda, meio_pagamento, nsu, autorizacao, tipo_lancamento, lancamento")
+    .eq("clinica_id", clinicaId)
+    .not("data_venda", "is", null);
+
+  if (!detalhados || detalhados.length === 0) return stats;
+
+  // Filter only actual sales (not negociações/antecipações)
+  const salesOnly = (detalhados as GetnetDetalhado[]).filter(d =>
+    !d.tipo_lancamento ||
+    (!normalizeText(d.tipo_lancamento).includes("negociacoes") &&
+     !normalizeText(d.lancamento).includes("cedido"))
+  );
+
+  // Load Feegow vendas in period
+  const { data: vendas } = await supabase
+    .from("transacoes_vendas")
+    .select("id, valor_bruto, valor_pago, data_competencia, forma_pagamento_enum")
+    .eq("clinica_id", clinicaId)
+    .gte("data_competencia", dateStart)
+    .lte("data_competencia", dateEnd)
+    .in("forma_pagamento_enum", ["cartao_credito", "cartao_debito", "credito", "debito"]);
+
+  if (!vendas || vendas.length === 0) { stats.pendentes = salesOnly.length; return stats; }
+
+  // Get already matched
+  const { data: jaConc } = await supabase
+    .from("conciliacao_vendas_gateway")
+    .select("getnet_detalhado_id, feegow_venda_id")
+    .eq("clinica_id", clinicaId)
+    .eq("status", "conciliado");
+
+  const usedGetnet = new Set((jaConc || []).map((r: any) => r.getnet_detalhado_id));
+  const usedFeegow = new Set((jaConc || []).map((r: any) => r.feegow_venda_id));
+
+  const matches: VendaGatewayMatch[] = [];
+  const usedG = new Set<string>();
+  const usedF = new Set<string>();
+
+  for (const det of salesOnly) {
+    if (usedGetnet.has(det.id) || usedG.has(det.id)) continue;
+    if (!det.data_venda || det.valor_venda <= 0) { stats.pendentes++; continue; }
+
+    let best: { v: any; score: number; div: number; rule: string } | null = null;
+
+    for (const v of vendas as any[]) {
+      if (usedFeegow.has(v.id) || usedF.has(v.id)) continue;
+
+      const feegowVal = v.valor_pago || v.valor_bruto;
+      const div = Math.abs(det.valor_venda - feegowVal);
+      if (div > toleranciaValor) continue;
+
+      const dias = daysDiff(det.data_venda!, v.data_competencia);
+      if (dias > toleranciaDias) continue;
+
+      let score = 0;
+      let rule = "";
+
+      if (div === 0) { score += 60; rule += "valor_exato "; }
+      else if (div <= 0.10) { score += 50; rule += "valor_centavos "; }
+      else { score += 35; rule += "valor_tolerancia "; }
+
+      if (dias === 0) { score += 25; rule += "data_exata "; }
+      else if (dias === 1) { score += 15; rule += "data_d1 "; }
+      else { score += 8; rule += "data_d2 "; }
+
+      // Meio pagamento bonus
+      const fp = (v.forma_pagamento_enum || "").toLowerCase();
+      if (det.meio_pagamento === "cartao_debito" && fp.includes("debito")) { score += 10; rule += "meio_match "; }
+      else if (det.meio_pagamento === "cartao_credito" && fp.includes("credito")) { score += 10; rule += "meio_match "; }
+
+      score = Math.max(0, Math.min(100, score));
+      if (score > 50 && (!best || score > best.score)) {
+        best = { v, score, div, rule: rule.trim() };
+      }
+    }
+
+    if (!best) { stats.pendentes++; continue; }
+
+    usedG.add(det.id);
+    usedF.add(best.v.id);
+
+    const status = best.score >= 75 ? "conciliado" : "divergente";
+    matches.push({
+      getnet_detalhado_id: det.id,
+      feegow_venda_id: best.v.id,
+      score: best.score,
+      rule: best.rule,
+      divergencia: best.div,
+      status,
+    });
+
+    if (status === "conciliado") stats.conciliados++;
+    else stats.divergentes++;
+  }
+
+  // Persist
+  for (const m of matches) {
+    try {
+      await supabase.from("conciliacao_vendas_gateway").upsert({
+        clinica_id: clinicaId,
+        getnet_detalhado_id: m.getnet_detalhado_id,
+        feegow_venda_id: m.feegow_venda_id,
+        score: m.score, match_confidence: m.score >= 90 ? "alta" : m.score >= 75 ? "media" : "baixa",
+        rule_applied: m.rule, status: m.status, divergencia: m.divergencia,
+      }, { onConflict: "getnet_detalhado_id" });
+    } catch (e) {
+      stats.erros.push(`VendaGW ${m.getnet_detalhado_id}: ${e.message}`);
+    }
+  }
+
+  stats.cobertura_pct = salesOnly.length > 0 ? Math.round(stats.conciliados / salesOnly.length * 100) : 0;
+  return stats;
+}
+
 // ─── MAIN HANDLER ──────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -661,6 +981,8 @@ Deno.serve(async (req) => {
     let persisted = 0;
     let debitoStats = { processados: 0, baixados: 0, erros: [] as string[] };
     let expenseStats = { conciliados: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
+    let recebiveisStats = { conciliados: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
+    let vendasGwStats = { conciliados: 0, divergentes: 0, pendentes: 0, cobertura_pct: 0, erros: [] as string[] };
 
     if (!dryRun) {
       for (const match of allMatches) {
@@ -706,6 +1028,12 @@ Deno.serve(async (req) => {
 
       // Step 5: Reconcile Expenses (AP ↔ Extrato)
       expenseStats = await reconcileExpenses(supabase, clinicaId, debitos);
+
+      // Step 6: Banco ↔ Getnet Recebíveis (RESUMO)
+      recebiveisStats = await reconcileRecebiveisGetnet(supabase, clinicaId, creditos);
+
+      // Step 7: Getnet Detalhado ↔ Feegow Vendas
+      vendasGwStats = await reconcileVendasGateway(supabase, clinicaId, dateStart, dateEnd);
     }
 
     // ── Summary ──────────────────────────────────────────────
@@ -717,12 +1045,22 @@ Deno.serve(async (req) => {
         creditos_banco: creditos.length,
         debitos_banco: debitos.length,
       },
-      matches: {
-        feegow_getnet: matchesVG.length,
-        getnet_banco: matchesGB.length,
+      receitas: {
+        feegow_getnet: { conciliadas: matchesVG.length, pendentes: vendas.length - matchesVG.length },
+        getnet_banco: { conciliadas: matchesGB.length, pendentes: getnetTxs.length - new Set([...matchesVG.map(m => m.getnet_id), ...matchesGB.map(m => m.getnet_id)]).size },
+        getnet_recebiveis_banco: {
+          conciliadas: recebiveisStats.conciliados,
+          divergentes: recebiveisStats.divergentes,
+          pendentes: recebiveisStats.pendentes,
+        },
+        getnet_vendas_feegow: {
+          conciliadas: vendasGwStats.conciliados,
+          divergentes: vendasGwStats.divergentes,
+          pendentes: vendasGwStats.pendentes,
+          cobertura_pct: vendasGwStats.cobertura_pct,
+        },
         triplo: tripleMatches.length,
-        total: allMatches.length,
-        persisted,
+        total_persisted: persisted,
       },
       debitos_automaticos: debitoStats,
       despesas: {
@@ -735,7 +1073,7 @@ Deno.serve(async (req) => {
         vendas_sem_match: vendas.length - matchesVG.length,
         getnet_sem_match: getnetTxs.length -
           new Set([...matchesVG.map((m) => m.getnet_id), ...matchesGB.map((m) => m.getnet_id)]).size,
-        creditos_sem_match: creditos.length - matchesGB.length,
+        creditos_sem_match: creditos.length - matchesGB.length - recebiveisStats.conciliados,
         debitos_sem_match: debitos.length - debitoStats.baixados,
       },
       taxas_getnet: {
@@ -749,8 +1087,8 @@ Deno.serve(async (req) => {
     if (logId) {
       await supabase.from("integracao_logs").update({
         status: "sucesso", fim: new Date().toISOString(),
-        registros_processados: allMatches.length + debitoStats.processados + (expenseStats.conciliados + expenseStats.divergentes),
-        registros_criados: persisted + debitoStats.baixados + expenseStats.conciliados,
+        registros_processados: allMatches.length + debitoStats.processados + (expenseStats.conciliados + expenseStats.divergentes) + recebiveisStats.conciliados + vendasGwStats.conciliados,
+        registros_criados: persisted + debitoStats.baixados + expenseStats.conciliados + recebiveisStats.conciliados + vendasGwStats.conciliados,
         detalhes: summary,
       }).eq("id", logId);
     }

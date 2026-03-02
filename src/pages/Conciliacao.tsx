@@ -20,8 +20,17 @@ interface ReconciliationResult {
   success: boolean;
   periodo: { start: string; end: string };
   totais: { vendas_feegow: number; getnet_transacoes: number; creditos_banco: number; debitos_banco: number };
+  receitas?: {
+    feegow_getnet?: { conciliadas: number; pendentes: number };
+    getnet_banco?: { conciliadas: number; pendentes: number };
+    getnet_recebiveis_banco?: { conciliadas: number; divergentes: number; pendentes: number };
+    getnet_vendas_feegow?: { conciliadas: number; divergentes: number; pendentes: number; cobertura_pct: number };
+    triplo?: number;
+    total_persisted?: number;
+  };
   matches: { feegow_getnet: number; getnet_banco: number; triplo: number; total: number; persisted: number };
   debitos_automaticos: { processados: number; baixados: number; erros: string[] };
+  despesas?: { conciliadas: number; divergentes: number; pendentes: number; erros: number };
   pendencias: { vendas_sem_match: number; getnet_sem_match: number; creditos_sem_match: number; debitos_sem_match: number };
   taxas_getnet?: { total_bruto: number; total_taxa: number; total_liquido: number };
   dry_run: boolean;
@@ -101,6 +110,7 @@ export default function Conciliacao() {
     : 0;
 
   const [importingGetnet, setImportingGetnet] = useState(false);
+  const [importingRecebiveis, setImportingRecebiveis] = useState(false);
 
   const handleGetnetCSV = async (e: React.ChangeEvent<HTMLInputElement>, tipo: "cartao" | "pix") => {
     const file = e.target.files?.[0];
@@ -112,11 +122,30 @@ export default function Conciliacao() {
         body: { clinica_id: clinicaId, csv_content: text, tipo_extrato: tipo, nome_arquivo: file.name },
       });
       if (error) throw error;
-      toast({ title: "Getnet importado!", description: `${data.created} transações criadas, ${data.skipped} duplicadas ignoradas` });
+      toast({ title: "Getnet importado!", description: `${data.imported_count} transações criadas` });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
       setImportingGetnet(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleRecebiveisCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !clinicaId) return;
+    setImportingRecebiveis(true);
+    try {
+      const text = await file.text();
+      const { data, error } = await supabase.functions.invoke("import-getnet-recebiveis", {
+        body: { clinica_id: clinicaId, csv_content: text, nome_arquivo: file.name },
+      });
+      if (error) throw error;
+      toast({ title: `Recebíveis ${data.layout} importados!`, description: `${data.imported_count} registros criados` });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setImportingRecebiveis(false);
       e.target.value = "";
     }
   };
@@ -132,10 +161,10 @@ export default function Conciliacao() {
         </div>
 
         {/* Import + Filtros */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><CreditCard className="h-4 w-4" /> Importar Getnet CSV</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2"><CreditCard className="h-4 w-4" /> Importar Getnet Vendas</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-3">
               <div>
@@ -150,6 +179,19 @@ export default function Conciliacao() {
                 </Label>
                 <Input id="getnet-pix" type="file" accept=".csv" className="hidden" onChange={(e) => handleGetnetCSV(e, "pix")} disabled={importingGetnet} />
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><FileArchive className="h-4 w-4" /> Importar Getnet Recebíveis</CardTitle>
+              <CardDescription className="text-xs">Detalhado, Resumo ou Sintético</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Label htmlFor="getnet-recebiveis" className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input bg-muted/50 px-4 py-3 text-sm text-muted-foreground hover:bg-muted">
+                <Upload className="h-4 w-4" />{importingRecebiveis ? "Processando..." : "Recebíveis CSV"}
+              </Label>
+              <Input id="getnet-recebiveis" type="file" accept=".csv" className="hidden" onChange={handleRecebiveisCSV} disabled={importingRecebiveis} />
             </CardContent>
           </Card>
 
@@ -218,7 +260,76 @@ export default function Conciliacao() {
           </Card>
         )}
 
-        {/* Status geral */}
+        {/* Waterfall: Feegow → Getnet Vendas → Getnet Recebíveis → Banco */}
+        {result?.receitas && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Waterfall de Conciliação</CardTitle>
+              <CardDescription>Feegow (competência) → Getnet Vendas (captura) → Getnet Recebíveis (liquidação) → Banco (caixa)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <WaterfallStep
+                  label="Feegow ↔ Getnet Venda"
+                  conciliadas={result.receitas.getnet_vendas_feegow?.conciliadas ?? 0}
+                  divergentes={result.receitas.getnet_vendas_feegow?.divergentes ?? 0}
+                  pendentes={result.receitas.getnet_vendas_feegow?.pendentes ?? 0}
+                  extra={result.receitas.getnet_vendas_feegow?.cobertura_pct ? `${result.receitas.getnet_vendas_feegow.cobertura_pct}% cobertura` : undefined}
+                />
+                <WaterfallStep
+                  label="Feegow ↔ Getnet TX"
+                  conciliadas={result.receitas.feegow_getnet?.conciliadas ?? result.matches.feegow_getnet}
+                  divergentes={0}
+                  pendentes={result.receitas.feegow_getnet?.pendentes ?? result.pendencias.vendas_sem_match}
+                />
+                <WaterfallStep
+                  label="Getnet Receb. ↔ Banco"
+                  conciliadas={result.receitas.getnet_recebiveis_banco?.conciliadas ?? 0}
+                  divergentes={result.receitas.getnet_recebiveis_banco?.divergentes ?? 0}
+                  pendentes={result.receitas.getnet_recebiveis_banco?.pendentes ?? 0}
+                />
+                <WaterfallStep
+                  label="Getnet TX ↔ Banco"
+                  conciliadas={result.receitas.getnet_banco?.conciliadas ?? result.matches.getnet_banco}
+                  divergentes={0}
+                  pendentes={result.receitas.getnet_banco?.pendentes ?? result.pendencias.creditos_sem_match}
+                />
+              </div>
+              {result.receitas.triplo !== undefined && result.receitas.triplo > 0 && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <span className="text-sm font-medium">{result.receitas.triplo} conciliações triplas (Feegow↔Getnet↔Banco)</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Despesas AP */}
+        {result?.despesas && (result.despesas.conciliadas > 0 || result.despesas.divergentes > 0 || result.despesas.pendentes > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Despesas (AP ↔ Extrato)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-600">{result.despesas.conciliadas}</p>
+                  <p className="text-xs text-muted-foreground">Conciliadas</p>
+                </div>
+                <div className="rounded-lg border p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-600">{result.despesas.divergentes}</p>
+                  <p className="text-xs text-muted-foreground">Divergentes</p>
+                </div>
+                <div className="rounded-lg border p-3 text-center">
+                  <p className="text-2xl font-bold text-muted-foreground">{result.despesas.pendentes}</p>
+                  <p className="text-xs text-muted-foreground">Pendentes</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {result && (
           <Card>
             <CardHeader>
@@ -347,6 +458,23 @@ function StatRow({ label, value }: { label: string; value: number }) {
     <div className="flex items-center justify-between rounded-lg border p-3">
       <span className="text-sm text-muted-foreground">{label}</span>
       <span className="text-lg font-bold">{value}</span>
+    </div>
+  );
+}
+
+function WaterfallStep({ label, conciliadas, divergentes, pendentes, extra }: {
+  label: string; conciliadas: number; divergentes: number; pendentes: number; extra?: string;
+}) {
+  return (
+    <div className="rounded-lg border p-3 text-center space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-lg font-bold text-emerald-600">{conciliadas}</p>
+      <p className="text-[10px] text-muted-foreground">
+        {divergentes > 0 && <span className="text-amber-500">{divergentes} div. </span>}
+        {pendentes > 0 && <span>{pendentes} pend.</span>}
+        {conciliadas > 0 && divergentes === 0 && pendentes === 0 && <span className="text-emerald-500">✓</span>}
+      </p>
+      {extra && <p className="text-[10px] text-muted-foreground">{extra}</p>}
     </div>
   );
 }
