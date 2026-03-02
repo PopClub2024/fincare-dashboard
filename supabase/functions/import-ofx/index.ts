@@ -7,13 +7,25 @@ const corsHeaders = {
 };
 
 // ─── Auth ───────────────────────────────────────────────────────
-function verifyAuth(req: Request): boolean {
+async function verifyAuth(req: Request): Promise<boolean> {
   const secret = Deno.env.get("AUTOMATION_TOKEN");
-  if (!secret) return false;
   const ws = req.headers.get("x-webhook-secret") || "";
-  if (ws && ws === secret) return true;
+  if (secret && ws && ws === secret) return true;
   const bearer = (req.headers.get("authorization") || "").replace("Bearer ", "");
-  if (bearer && bearer === secret) return true;
+  if (secret && bearer && bearer === secret) return true;
+
+  // Fallback: validate user JWT
+  if (bearer) {
+    try {
+      const sb = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        { global: { headers: { Authorization: `Bearer ${bearer}` } } },
+      );
+      const { data, error } = await sb.auth.getUser(bearer);
+      if (!error && data?.user) return true;
+    } catch { /* ignore */ }
+  }
   return false;
 }
 
@@ -83,7 +95,7 @@ Deno.serve(async (req) => {
   }
 
   // Auth
-  if (!verifyAuth(req)) {
+  if (!(await verifyAuth(req))) {
     return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
