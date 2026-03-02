@@ -289,6 +289,37 @@ async function importGetnetStatement(supabase: any, supabaseUrl: string, service
   return jsonResponse({ success: result.ok, import_run_id: run?.id, ...result.data });
 }
 
+// ─── Action: import_getnet_recebiveis ───────────────────────────
+async function importGetnetRecebiveis(supabase: any, supabaseUrl: string, serviceKey: string, body: any) {
+  const { clinica_id, file_content, file_url, file_name, layout, mes_ref } = body;
+  if (!clinica_id) return jsonResponse({ error: "clinica_id obrigatório" }, 400);
+
+  let content = file_content;
+  if (!content && file_url) {
+    const res = await fetch(file_url);
+    content = await res.text();
+  }
+  if (!content) return jsonResponse({ error: "file_content ou file_url obrigatório" }, 400);
+
+  const fileHash = await sha256(clinica_id + content);
+  const { data: existing } = await supabase
+    .from("import_runs")
+    .select("id, status")
+    .eq("clinica_id", clinica_id)
+    .eq("arquivo_hash", fileHash)
+    .maybeSingle();
+
+  if (existing) {
+    return jsonResponse({ success: true, message: "Arquivo já processado", import_run_id: existing.id });
+  }
+
+  const result = await callEdgeFunction(supabaseUrl, serviceKey, "import-getnet-recebiveis", {
+    clinica_id, csv_content: content, filename: file_name, layout, mes_ref,
+  });
+
+  return jsonResponse({ success: result.ok, ...result.data });
+}
+
 // ─── Action: run_reconciliation ─────────────────────────────────
 async function runReconciliation(supabase: any, supabaseUrl: string, serviceKey: string, body: any) {
   const { clinica_id, start_date, end_date } = body;
@@ -695,6 +726,7 @@ Deno.serve(async (req) => {
           "sync_feegow",
           "import_bank_statement",
           "import_getnet_statement",
+          "import_getnet_recebiveis",
           "run_reconciliation",
           "import_repasses_medicos",
           "autopilot_run",
@@ -719,6 +751,9 @@ Deno.serve(async (req) => {
         break;
       case "import_getnet_statement":
         response = await importGetnetStatement(supabase, supabaseUrl, serviceKey, body);
+        break;
+      case "import_getnet_recebiveis":
+        response = await importGetnetRecebiveis(supabase, supabaseUrl, serviceKey, body);
         break;
       case "run_reconciliation":
         response = await runReconciliation(supabase, supabaseUrl, serviceKey, body);
