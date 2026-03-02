@@ -3,12 +3,41 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-webhook-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ─── Auth ───────────────────────────────────────────────────────
+function verifyAuth(req: Request): boolean {
+  const secret = Deno.env.get("AUTOMATION_TOKEN");
+  if (!secret) return false;
+  const ws = req.headers.get("x-webhook-secret") || "";
+  if (ws && ws === secret) return true;
+  const bearer = (req.headers.get("authorization") || "").replace("Bearer ", "");
+  if (bearer && bearer === secret) return true;
+  return false;
+}
+
+function jsonResponse(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+async function sha256(data: string): Promise<string> {
+  const encoded = new TextEncoder().encode(data);
+  const buf = await crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// ─── Main ───────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  if (!verifyAuth(req)) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -17,26 +46,100 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { clinica_id, comprovante_id, image_base64 } = await req.json();
-    if (!clinica_id || !comprovante_id) {
-      return new Response(JSON.stringify({ error: "clinica_id and comprovante_id required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let clinica_id = "";
+    let tipo = "";
+    let descricao_hint = "";
+    let fileBytes: Uint8Array | null = null;
+    let fileName = "comprovante";
+    let fileMime = "application/octet-stream";
+    let image_base64 = "";
+
+    const contentType = req.headers.get("content-type") || "";
+
+    // ── Parse request ──────────────────────────────────────────
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      clinica_id = (formData.get("clinica_id") as string) || "";
+      tipo = (formData.get("tipo") as string) || "";
+      descricao_hint = (formData.get("descricao_hint") as string) || "";
+
+      const file = formData.get("file") as File | null;
+      if (!file) {
+        return jsonResponse({ error: "Campo 'file' obrigatório no multipart" }, 400);
+      }
+      fileName = file.name || "comprovante";
+      fileMime = file.type || "application/octet-stream";
+      if (!descricao_hint) descricao_hint = fileName;
+
+      // Validate mime
+      const allowedMimes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (!allowedMimes.includes(fileMime)) {
+        return jsonResponse({ error: `Tipo de arquivo não suportado: ${fileMime}. Aceitos: JPG, PNG, WebP, PDF` }, 400);
+      }
+
+      fileBytes = new Uint8Array(await file.arrayBuffer());
+      // Convert to base64 for AI vision
+      image_base64 = btoa(String.fromCharCode(...fileBytes));
+
+    } else if (contentType.includes("application/json")) {
+      const body = await req.json();
+      clinica_id = body.clinica_id || "";
+      tipo = body.tipo || "";
+      descricao_hint = body.descricao_hint || body.arquivo_nome || "";
+      image_base64 = body.image_base64 || body.file_base64 || "";
+      fileName = body.filename || body.arquivo_nome || "comprovante";
+      fileMime = body.mime_type || "image/jpeg";
+
+      if (image_base64) {
+        fileBytes = Uint8Array.from(atob(image_base64), c => c.charCodeAt(0));
+      }
+    } else {
+      return jsonResponse({ error: "Content-Type deve ser multipart/form-data ou application/json" }, 400);
     }
 
-    // Get comprovante record
+    // ── Validations ────────────────────────────────────────────
+    if (!clinica_id) {
+      return jsonResponse({ error: "clinica_id obrigatório" }, 400);
+    }
+    if (!fileBytes || fileBytes.length === 0) {
+      return jsonResponse({ error: "Arquivo obrigatório (file ou file_base64)" }, 400);
+    }
+
+    // ── Upload file to storage ─────────────────────────────────
+    const fileExt = fileName.split(".").pop()?.toLowerCase() || "jpg";
+    const storagePath = `${clinica_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${fileExt}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("comprovantes")
+      .upload(storagePath, fileBytes, { contentType: fileMime, upsert: false });
+
+    if (uploadErr) {
+      console.error("Storage upload error:", uploadErr);
+      return jsonResponse({ error: `Erro ao salvar arquivo: ${uploadErr.message}` }, 500);
+    }
+
+    const { data: urlData } = supabase.storage.from("comprovantes").getPublicUrl(storagePath);
+    const arquivo_url = urlData?.publicUrl || `${supabaseUrl}/storage/v1/object/public/comprovantes/${storagePath}`;
+
+    // ── Create comprovante record ──────────────────────────────
     const { data: comprovante, error: compErr } = await supabase
       .from("comprovantes")
-      .select("*")
-      .eq("id", comprovante_id)
+      .insert({
+        clinica_id,
+        arquivo_url,
+        arquivo_nome: fileName,
+        tipo_arquivo: fileMime,
+        status: "pendente",
+      })
+      .select("id")
       .single();
-    if (compErr || !comprovante) {
-      return new Response(JSON.stringify({ error: "Comprovante não encontrado" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
-    // Get plano de contas for context
+    if (compErr) {
+      return jsonResponse({ error: `Erro ao criar comprovante: ${compErr.message}` }, 500);
+    }
+    const comprovante_id = comprovante.id;
+
+    // ── Get plano de contas for AI context ─────────────────────
     const { data: planoContas } = await supabase
       .from("plano_contas")
       .select("id, codigo, codigo_estruturado, descricao, indicador, categoria")
@@ -47,19 +150,27 @@ Deno.serve(async (req) => {
       .map((p: any) => `${p.codigo_estruturado} - ${p.descricao} (${p.categoria})`)
       .join("\n");
 
-    // Build AI prompt
-    const systemPrompt = `Você é um assistente financeiro especializado em clínicas médicas. Analise o comprovante de pagamento e extraia os campos estruturados. Use o plano de contas abaixo para classificar:
+    // ── AI Extraction ──────────────────────────────────────────
+    const systemPrompt = `Você é um assistente financeiro especializado em clínicas médicas.
+Analise o comprovante de pagamento e extraia os dados estruturados.
+Use o plano de contas abaixo para classificar:
 
 ${planoList}
 
-Retorne os dados usando a função extract_comprovante_data.`;
+Classifique também:
+- tipo_custo: "fixo" ou "variavel"
+- categoria sugerida (ex: "Aluguel", "Material", "Serviço terceirizado")
+- subcategoria sugerida
 
-    const userContent = image_base64
-      ? [
-          { type: "text", text: "Analise este comprovante de pagamento e extraia os dados." },
-          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image_base64}` } },
-        ]
-      : [{ type: "text", text: `Analise o comprovante no URL: ${comprovante.arquivo_url}` }];
+Retorne usando a função extract_comprovante_data.
+${descricao_hint ? `Dica do usuário sobre este comprovante: "${descricao_hint}"` : ""}
+${tipo ? `Tipo informado: "${tipo}"` : ""}`;
+
+    const mimeForAI = fileMime === "application/pdf" ? "application/pdf" : fileMime;
+    const userContent = [
+      { type: "text", text: "Analise este comprovante de pagamento e extraia os dados." },
+      { type: "image_url", image_url: { url: `data:${mimeForAI};base64,${image_base64}` } },
+    ];
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -85,10 +196,13 @@ Retorne os dados usando a função extract_comprovante_data.`;
                 valor: { type: "number", description: "Valor do pagamento" },
                 data_pagamento: { type: "string", description: "Data do pagamento (YYYY-MM-DD)" },
                 descricao: { type: "string", description: "Descrição do pagamento" },
-                forma_pagamento: { type: "string", enum: ["pix","dinheiro","convenio_nf","cartao_credito","cartao_debito"] },
-                canal_pagamento: { type: "string", enum: ["qrcode","chave_celular","chave_cnpj","maquininha","boleto","deposito","outro"] },
+                forma_pagamento: { type: "string", enum: ["pix", "dinheiro", "convenio_nf", "cartao_credito", "cartao_debito", "boleto", "transferencia"] },
+                canal_pagamento: { type: "string", enum: ["qrcode", "chave_celular", "chave_cnpj", "maquininha", "boleto", "deposito", "outro"] },
                 banco_referencia: { type: "string", description: "Banco de referência" },
                 plano_contas_codigo_estruturado: { type: "string", description: "Código estruturado do plano de contas mais adequado" },
+                tipo_custo: { type: "string", enum: ["fixo", "variavel"], description: "Classificação: custo fixo ou variável" },
+                categoria_sugerida: { type: "string", description: "Categoria sugerida (ex: Aluguel, Material, Serviços)" },
+                subcategoria_sugerida: { type: "string", description: "Subcategoria sugerida" },
                 confianca: { type: "number", description: "Nível de confiança 0-100" },
               },
               required: ["fornecedor", "valor", "data_pagamento"],
@@ -102,32 +216,33 @@ Retorne os dados usando a função extract_comprovante_data.`;
 
     if (!aiResponse.ok) {
       const status = aiResponse.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Tente novamente em alguns segundos." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos de IA insuficientes." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI error: ${status}`);
+      const errBody = await aiResponse.text();
+      console.error("AI error:", status, errBody);
+
+      await supabase.from("comprovantes").update({
+        status: "erro",
+        erro_processamento: `AI error: ${status}`,
+      }).eq("id", comprovante_id);
+
+      if (status === 429) return jsonResponse({ error: "Rate limit exceeded. Tente novamente em alguns segundos." }, 429);
+      if (status === 402) return jsonResponse({ error: "Créditos de IA insuficientes." }, 402);
+      return jsonResponse({ error: `Erro na IA: ${status}` }, 500);
     }
 
     const aiData = await aiResponse.json();
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall) {
-      await supabase.from("comprovantes").update({ status: "erro", erro_processamento: "IA não retornou dados estruturados" }).eq("id", comprovante_id);
-      return new Response(JSON.stringify({ error: "IA não extraiu dados" }), {
-        status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      await supabase.from("comprovantes").update({
+        status: "erro",
+        erro_processamento: "IA não retornou dados estruturados",
+      }).eq("id", comprovante_id);
+      return jsonResponse({ error: "IA não extraiu dados" }, 422);
     }
 
     const extracted = JSON.parse(toolCall.function.arguments);
 
-    // Find plano_contas match
-    let planoContasId = null;
+    // ── Find plano_contas match ────────────────────────────────
+    let planoContasId: string | null = null;
     if (extracted.plano_contas_codigo_estruturado) {
       const { data: plano } = await supabase
         .from("plano_contas")
@@ -138,48 +253,86 @@ Retorne os dados usando a função extract_comprovante_data.`;
       planoContasId = plano?.id || null;
     }
 
-    // Update comprovante
+    // ── Update comprovante ─────────────────────────────────────
     await supabase.from("comprovantes").update({
       status: "processado",
       dados_extraidos: extracted,
     }).eq("id", comprovante_id);
 
-    // Create lancamento
+    // ── Create lançamento in contas_pagar_lancamentos ──────────
+    const tipoDespesa = extracted.tipo_custo === "fixo" ? "fixo" : "variavel";
     const { data: lancamento, error: lancErr } = await supabase
       .from("contas_pagar_lancamentos")
       .insert({
         clinica_id,
         plano_contas_id: planoContasId,
-        descricao: extracted.descricao || comprovante.arquivo_nome,
-        fornecedor: extracted.fornecedor,
-        valor: extracted.valor,
+        descricao: extracted.descricao || descricao_hint || fileName,
+        fornecedor: extracted.fornecedor || null,
+        valor: extracted.valor || 0,
         data_competencia: extracted.data_pagamento || new Date().toISOString().split("T")[0],
-        data_pagamento: extracted.data_pagamento,
+        data_pagamento: extracted.data_pagamento || null,
         forma_pagamento: extracted.forma_pagamento || null,
         canal_pagamento: extracted.canal_pagamento || null,
         banco_referencia: extracted.banco_referencia || null,
         comprovante_id,
+        tipo_despesa: tipoDespesa,
         status: planoContasId ? "classificado" : "a_classificar",
+        observacao: `Processado via comprovante AI. Confiança: ${extracted.confianca || "N/A"}%`,
       })
-      .select()
+      .select("id")
       .single();
 
     if (lancErr) {
-      return new Response(JSON.stringify({ error: lancErr.message }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("Lancamento insert error:", lancErr);
+      return jsonResponse({ error: `Erro ao criar lançamento: ${lancErr.message}` }, 500);
     }
 
     // Link lancamento to comprovante
     await supabase.from("comprovantes").update({ lancamento_id: lancamento.id }).eq("id", comprovante_id);
 
-    return new Response(JSON.stringify({ success: true, lancamento, extracted }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // ── Log in integracao_logs ──────────────────────────────────
+    await supabase.from("integracao_logs").insert({
+      clinica_id,
+      integracao: "process-comprovante",
+      endpoint: "process-comprovante",
+      acao: "process_comprovante",
+      status: "sucesso",
+      inicio: new Date().toISOString(),
+      fim: new Date().toISOString(),
+      registros_processados: 1,
+      registros_criados: 1,
+      registros_atualizados: 0,
+      registros_ignorados: 0,
+      detalhes: { fileName, fileMime, storagePath, confianca: extracted.confianca },
+      erros: null,
     });
+
+    // ── Response ───────────────────────────────────────────────
+    return jsonResponse({
+      ok: true,
+      conta_pagar_id: lancamento.id,
+      comprovante_id,
+      comprovante_url: arquivo_url,
+      extracted: {
+        fornecedor: extracted.fornecedor,
+        valor: extracted.valor,
+        data_pagamento: extracted.data_pagamento,
+        descricao: extracted.descricao,
+        forma_pagamento: extracted.forma_pagamento,
+        banco_referencia: extracted.banco_referencia,
+      },
+      suggested_classification: {
+        tipo_custo: extracted.tipo_custo || null,
+        categoria: extracted.categoria_sugerida || null,
+        subcategoria: extracted.subcategoria_sugerida || null,
+        plano_contas_codigo: extracted.plano_contas_codigo_estruturado || null,
+        plano_contas_id: planoContasId,
+        confianca: extracted.confianca || null,
+      },
+    });
+
   } catch (e) {
     console.error("process-comprovante error:", e);
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: e.message }, 500);
   }
 });
