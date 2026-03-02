@@ -333,8 +333,8 @@ ${tipo ? `Tipo: "${tipo}"` : ""}`;
         banco_referencia: extracted.banco_referencia || null,
         comprovante_id,
         tipo_despesa: extracted.tipo_custo === "fixo" ? "fixo" : "variavel",
-        status: planoContasId ? "classificado" : "a_classificar",
-        observacao: `Comprovante AI (pendente conciliação). Confiança: ${extracted.confianca || "N/A"}%`,
+        status: "pendente_conciliacao",
+        observacao: `Comprovante AI (pendente conciliação extrato). Confiança: ${extracted.confianca || "N/A"}%`,
       })
       .select("id")
       .single();
@@ -346,6 +346,16 @@ ${tipo ? `Tipo: "${tipo}"` : ""}`;
     }
 
     await supabase.from("comprovantes").update({ lancamento_id: lancamento.id }).eq("id", comprovante_id);
+
+    // Create conciliacao_despesas record (pending reconciliation with bank statement)
+    const matchKey = `${(extracted.valor || 0).toFixed(2)}|${extracted.data_pagamento || ""}|${(extracted.fornecedor || "").toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+    await supabase.from("conciliacao_despesas").insert({
+      clinica_id,
+      lancamento_id: lancamento.id,
+      status: "pendente",
+      match_key: matchKey,
+      observacao: "Aguardando extrato bancário para conciliação",
+    });
 
     // Log
     await supabase.from("integracao_logs").insert({

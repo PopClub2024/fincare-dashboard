@@ -506,6 +506,79 @@ export type Database = {
           },
         ]
       }
+      conciliacao_despesas: {
+        Row: {
+          clinica_id: string
+          conciliado_em: string | null
+          conciliado_por: string | null
+          created_at: string
+          divergencia: number | null
+          id: string
+          lancamento_id: string
+          match_key: string | null
+          metodo_match: string | null
+          observacao: string | null
+          score: number | null
+          status: string
+          transacao_bancaria_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          clinica_id: string
+          conciliado_em?: string | null
+          conciliado_por?: string | null
+          created_at?: string
+          divergencia?: number | null
+          id?: string
+          lancamento_id: string
+          match_key?: string | null
+          metodo_match?: string | null
+          observacao?: string | null
+          score?: number | null
+          status?: string
+          transacao_bancaria_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          clinica_id?: string
+          conciliado_em?: string | null
+          conciliado_por?: string | null
+          created_at?: string
+          divergencia?: number | null
+          id?: string
+          lancamento_id?: string
+          match_key?: string | null
+          metodo_match?: string | null
+          observacao?: string | null
+          score?: number | null
+          status?: string
+          transacao_bancaria_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conciliacao_despesas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conciliacao_despesas_lancamento_id_fkey"
+            columns: ["lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "contas_pagar_lancamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conciliacao_despesas_transacao_bancaria_id_fkey"
+            columns: ["transacao_bancaria_id"]
+            isOneToOne: false
+            referencedRelation: "transacoes_bancarias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conciliacoes: {
         Row: {
           clinica_id: string
@@ -3740,6 +3813,7 @@ export type Database = {
         | "classificado"
         | "pago"
         | "cancelado"
+        | "pendente_conciliacao"
       status_pagamento_nf:
         | "a_emitir"
         | "emitida"
@@ -3967,6 +4041,7 @@ export const Constants = {
         "classificado",
         "pago",
         "cancelado",
+        "pendente_conciliacao",
       ],
       status_pagamento_nf: [
         "a_emitir",
