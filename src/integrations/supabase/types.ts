@@ -451,6 +451,7 @@ export type Database = {
       }
       comprovantes: {
         Row: {
+          arquivo_hash: string | null
           arquivo_nome: string | null
           arquivo_url: string
           clinica_id: string
@@ -464,6 +465,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          arquivo_hash?: string | null
           arquivo_nome?: string | null
           arquivo_url: string
           clinica_id: string
@@ -477,6 +479,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          arquivo_hash?: string | null
           arquivo_nome?: string | null
           arquivo_url?: string
           clinica_id?: string
@@ -775,6 +778,7 @@ export type Database = {
           ref_dia_trabalhado: string | null
           status: Database["public"]["Enums"]["status_lancamento_cp"]
           tipo_despesa: Database["public"]["Enums"]["tipo_despesa"]
+          tipo_despesa_raw: string | null
           updated_at: string
           valor: number
         }
@@ -803,6 +807,7 @@ export type Database = {
           ref_dia_trabalhado?: string | null
           status?: Database["public"]["Enums"]["status_lancamento_cp"]
           tipo_despesa?: Database["public"]["Enums"]["tipo_despesa"]
+          tipo_despesa_raw?: string | null
           updated_at?: string
           valor?: number
         }
@@ -831,6 +836,7 @@ export type Database = {
           ref_dia_trabalhado?: string | null
           status?: Database["public"]["Enums"]["status_lancamento_cp"]
           tipo_despesa?: Database["public"]["Enums"]["tipo_despesa"]
+          tipo_despesa_raw?: string | null
           updated_at?: string
           valor?: number
         }
