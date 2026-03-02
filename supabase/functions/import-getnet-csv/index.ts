@@ -3,34 +3,45 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-webhook-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Parse Brazilian decimal (1.234,56 → 1234.56) or negative with minus
-function parseBRL(raw: string): number {
-  if (!raw || raw.trim() === "") return 0;
-  const cleaned = raw.trim().replace(/\./g, "").replace(",", ".");
-  return parseFloat(cleaned) || 0;
+// ─── Auth ───────────────────────────────────────────────────────
+function verifyAuth(req: Request): boolean {
+  const secret = Deno.env.get("AUTOMATION_TOKEN");
+  if (!secret) return false;
+  const ws = req.headers.get("x-webhook-secret") || "";
+  if (ws && ws === secret) return true;
+  const bearer = (req.headers.get("authorization") || "").replace("Bearer ", "");
+  if (bearer && bearer === secret) return true;
+  return false;
 }
 
-// Parse dd/MM/yyyy HH:mm → ISO string
-function parseDateTimeBR(raw: string): string {
-  const [datePart, timePart] = raw.trim().split(" ");
-  const [d, m, y] = datePart.split("/");
-  const time = timePart || "00:00";
-  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}T${time}:00`;
+// ─── Helpers ────────────────────────────────────────────────────
+function jsonResponse(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
-// Parse dd/MM/yyyy → yyyy-MM-dd
-function parseDateBR(raw: string): string | null {
-  if (!raw || raw.trim() === "") return null;
-  const [d, m, y] = raw.trim().split("/");
-  if (!y) return null;
-  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+async function sha256(data: string): Promise<string> {
+  const encoded = new TextEncoder().encode(data);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-// Parse CSV with semicolon delimiter, handling quoted fields
-function parseCSV(content: string): string[][] {
+// ─── Detect separator (`;` or `,`) ──────────────────────────────
+function detectSeparator(firstLine: string): string {
+  const semicolons = (firstLine.match(/;/g) || []).length;
+  const commas = (firstLine.match(/,/g) || []).length;
+  return semicolons >= commas ? ";" : ",";
+}
+
+// ─── Parse CSV with auto-detected delimiter ─────────────────────
+function parseCSV(content: string, sep: string): string[][] {
   const lines = content.split("\n").filter((l) => l.trim());
   return lines.map((line) => {
     const fields: string[] = [];
@@ -39,7 +50,7 @@ function parseCSV(content: string): string[][] {
     for (const ch of line) {
       if (ch === '"') {
         inQuotes = !inQuotes;
-      } else if (ch === ";" && !inQuotes) {
+      } else if (ch === sep && !inQuotes) {
         fields.push(current.trim());
         current = "";
       } else {
@@ -51,6 +62,46 @@ function parseCSV(content: string): string[][] {
   });
 }
 
+// ─── Parse Brazilian decimal (1.234,56 → 1234.56) ──────────────
+function parseBRL(raw: string): number {
+  if (!raw || raw.trim() === "") return 0;
+  const cleaned = raw.trim().replace(/\./g, "").replace(",", ".");
+  return parseFloat(cleaned) || 0;
+}
+
+// ─── Parse dd/MM/yyyy HH:mm → ISO string ───────────────────────
+function parseDateTimeBR(raw: string): string {
+  const [datePart, timePart] = raw.trim().split(" ");
+  const [d, m, y] = datePart.split("/");
+  const time = timePart || "00:00";
+  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}T${time}:00`;
+}
+
+// ─── Parse dd/MM/yyyy → yyyy-MM-dd ─────────────────────────────
+function parseDateBR(raw: string): string | null {
+  if (!raw || raw.trim() === "") return null;
+  const [d, m, y] = raw.trim().split("/");
+  if (!y) return null;
+  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
+
+// ─── Detect tipo from filename ──────────────────────────────────
+function detectTipoFromFilename(filename: string): string | null {
+  const upper = filename.toUpperCase();
+  if (upper.includes("PIX")) return "pix";
+  if (upper.includes("CARTAO") || upper.includes("CARTÃO")) return "cartao";
+  return null;
+}
+
+// ─── Detect tipo from header columns ────────────────────────────
+function detectTipoFromHeaders(headers: string[]): string | null {
+  const joined = headers.join("|").toUpperCase();
+  if (joined.includes("ID TRANSAÇÃO PIX") || joined.includes("INSTITUIÇÃO BANCÁRIA") || joined.includes("ID TRANSACAO PIX")) return "pix";
+  if (joined.includes("BANDEIRA") || joined.includes("MODALIDADE") || joined.includes("FORMA DE PAGAMENTO")) return "cartao";
+  return null;
+}
+
+// ─── Parsed types ───────────────────────────────────────────────
 interface ParsedCartao {
   tipo_extrato: "cartao";
   data_venda: string;
@@ -83,14 +134,12 @@ interface ParsedPix {
 }
 
 function parseCartaoCSV(rows: string[][]): ParsedCartao[] {
-  // Skip header row
   const results: ParsedCartao[] = [];
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     if (r.length < 18) continue;
-    const status = r[7]; // STATUS DA TRANSAÇÃO
-    if (status !== "Aprovada") continue; // Only approved transactions
-
+    const status = r[7];
+    if (status !== "Aprovada") continue;
     results.push({
       tipo_extrato: "cartao",
       data_venda: parseDateTimeBR(r[3]),
@@ -117,9 +166,8 @@ function parsePixCSV(rows: string[][]): ParsedPix[] {
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     if (r.length < 14) continue;
-    const status = r[13]; // STATUS
-    if (status !== "Paga") continue; // Only paid transactions
-
+    const status = r[13];
+    if (status !== "Paga") continue;
     results.push({
       tipo_extrato: "pix",
       data_venda: parseDateTimeBR(r[3]),
@@ -136,9 +184,15 @@ function parsePixCSV(rows: string[][]): ParsedPix[] {
   return results;
 }
 
+// ─── Main ───────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Auth
+  if (!verifyAuth(req)) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -146,76 +200,160 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const body = await req.json();
-    const { clinica_id, csv_content, tipo_extrato, nome_arquivo } = body;
+    let clinica_id = "";
+    let filename = "";
+    let csvContent = "";
+    let tipo_extrato: string | null = null;
 
-    if (!clinica_id || !csv_content || !tipo_extrato) {
-      return new Response(
-        JSON.stringify({ error: "clinica_id, csv_content e tipo_extrato obrigatórios" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const contentType = req.headers.get("content-type") || "";
+
+    // ── Parse request ──────────────────────────────────────────
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      clinica_id = (formData.get("clinica_id") as string) || "";
+      filename = (formData.get("filename") as string) || "";
+      tipo_extrato = (formData.get("tipo_extrato") as string) || null;
+
+      const file = formData.get("file") as File | null;
+      if (!file) {
+        return jsonResponse({ error: "Campo 'file' obrigatório no multipart" }, 400);
+      }
+      if (!filename) filename = file.name || "upload.csv";
+
+      // Validate extension
+      const ext = filename.split(".").pop()?.toLowerCase();
+      if (ext !== "csv") {
+        return jsonResponse({ error: "Arquivo deve ter extensão .csv" }, 400);
+      }
+
+      csvContent = await file.text();
+    } else if (contentType.includes("application/json")) {
+      const body = await req.json();
+      clinica_id = body.clinica_id || "";
+      filename = body.nome_arquivo || body.filename || "import.csv";
+      tipo_extrato = body.tipo_extrato || null;
+
+      if (body.csv_content) {
+        csvContent = body.csv_content;
+      } else if (body.file_base64) {
+        csvContent = atob(body.file_base64);
+      }
+    } else {
+      return jsonResponse({ error: "Content-Type deve ser multipart/form-data ou application/json" }, 400);
     }
 
-    const rows = parseCSV(csv_content);
-    let parsed: (ParsedCartao | ParsedPix)[] = [];
+    // ── Validations ────────────────────────────────────────────
+    if (!clinica_id) {
+      return jsonResponse({ error: "clinica_id obrigatório" }, 400);
+    }
+    if (!csvContent) {
+      return jsonResponse({ error: "Conteúdo CSV vazio" }, 400);
+    }
 
+    // ── Idempotency via hash ───────────────────────────────────
+    const fileHash = await sha256(clinica_id + csvContent);
+    const { data: existingRun } = await supabase
+      .from("import_runs")
+      .select("id, status")
+      .eq("clinica_id", clinica_id)
+      .eq("arquivo_hash", fileHash)
+      .maybeSingle();
+
+    if (existingRun) {
+      return jsonResponse({
+        ok: true,
+        message: "Arquivo já processado anteriormente",
+        import_run_id: existingRun.id,
+        imported_count: 0,
+        duplicates_count: 0,
+        period_start: null,
+        period_end: null,
+      });
+    }
+
+    // ── Auto-detect separator ──────────────────────────────────
+    const firstLine = csvContent.split("\n")[0] || "";
+    const sep = detectSeparator(firstLine);
+
+    // ── Parse CSV ──────────────────────────────────────────────
+    const rows = parseCSV(csvContent, sep);
+    if (rows.length < 2) {
+      return jsonResponse({ error: "CSV vazio ou sem dados" }, 400);
+    }
+
+    // ── Auto-detect tipo ───────────────────────────────────────
+    if (!tipo_extrato) {
+      tipo_extrato = detectTipoFromFilename(filename);
+    }
+    if (!tipo_extrato) {
+      tipo_extrato = detectTipoFromHeaders(rows[0]);
+    }
+    if (!tipo_extrato) {
+      return jsonResponse({ error: "Não foi possível detectar tipo_extrato (pix/cartao). Envie no campo tipo_extrato ou nomeie o arquivo com PIX ou CARTAO." }, 400);
+    }
+
+    // ── Parse rows ─────────────────────────────────────────────
+    let parsed: (ParsedCartao | ParsedPix)[] = [];
     if (tipo_extrato === "cartao") {
       parsed = parseCartaoCSV(rows);
     } else if (tipo_extrato === "pix") {
       parsed = parsePixCSV(rows);
     } else {
-      return new Response(
-        JSON.stringify({ error: "tipo_extrato deve ser 'cartao' ou 'pix'" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "tipo_extrato deve ser 'cartao' ou 'pix'" }, 400);
     }
 
     if (parsed.length === 0) {
-      return new Response(
-        JSON.stringify({ success: true, created: 0, skipped: 0, message: "Nenhuma transação aprovada/paga encontrada" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({
+        ok: true,
+        imported_count: 0,
+        duplicates_count: 0,
+        message: "Nenhuma transação aprovada/paga encontrada",
+        period_start: null,
+        period_end: null,
+        import_run_id: null,
+      });
     }
 
-    // Determine period
+    // ── Determine period ───────────────────────────────────────
     const dates = parsed.map((p) => p.data_venda).sort();
-    const periodoInicio = dates[0]?.split("T")[0];
-    const periodoFim = dates[dates.length - 1]?.split("T")[0];
+    const period_start = dates[0]?.split("T")[0];
+    const period_end = dates[dates.length - 1]?.split("T")[0];
 
-    // Create archive record
-    const { data: arquivo } = await supabase
-      .from("arquivos_importados")
+    // ── Create import_run ──────────────────────────────────────
+    const { data: run } = await supabase
+      .from("import_runs")
       .insert({
         clinica_id,
-        nome_arquivo: nome_arquivo || `getnet_${tipo_extrato}_${periodoInicio}_${periodoFim}.csv`,
         tipo: `getnet_${tipo_extrato}`,
-        registros_importados: parsed.length,
-        periodo_inicio: periodoInicio,
-        periodo_fim: periodoFim,
-        status: "processando",
+        origem: "webhook",
+        arquivo_nome: filename,
+        arquivo_hash: fileHash,
+        periodo_inicio: period_start,
+        periodo_fim: period_end,
+        registros_total: parsed.length,
       })
       .select("id")
       .single();
 
-    const arquivoId = arquivo?.id;
+    const importRunId = run?.id;
 
-    // Upsert transactions
+    // ── Upsert transactions ────────────────────────────────────
     let created = 0;
     let skipped = 0;
     const errors: string[] = [];
 
     for (const tx of parsed) {
-      const record: any = {
+      const record: Record<string, unknown> = {
         clinica_id,
         tipo_extrato: tx.tipo_extrato,
         data_venda: tx.data_venda,
         status_transacao: tx.status_transacao,
         comprovante_venda: tx.comprovante_venda,
-        terminal: (tx as any).terminal,
+        terminal: (tx as ParsedCartao | ParsedPix).terminal,
         valor_bruto: tx.valor_bruto,
         valor_taxa: tx.valor_taxa,
         valor_liquido: tx.valor_liquido,
-        arquivo_id: arquivoId,
+        arquivo_id: importRunId,
       };
 
       if (tx.tipo_extrato === "cartao") {
@@ -248,31 +386,35 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update arquivo status
-    if (arquivoId) {
-      await supabase
-        .from("arquivos_importados")
-        .update({
-          status: errors.length > 0 ? "erro_parcial" : "processado",
-          registros_importados: created,
-          observacao: skipped > 0 ? `${skipped} duplicados ignorados` : null,
-        })
-        .eq("id", arquivoId);
+    const imported_count = created;
+    const duplicates_count = skipped;
+    const finalStatus = errors.length > 0 ? (imported_count > 0 ? "erro_parcial" : "erro") : "sucesso";
+
+    // ── Update import_run ──────────────────────────────────────
+    if (importRunId) {
+      await supabase.from("import_runs").update({
+        status: finalStatus,
+        registros_criados: created,
+        registros_ignorados: skipped,
+        erros: errors,
+        detalhes: { tipo_extrato, separator: sep },
+        finished_at: new Date().toISOString(),
+      }).eq("id", importRunId);
     }
 
-    // Log
+    // ── Log ────────────────────────────────────────────────────
     await supabase.from("integracao_logs").insert({
       clinica_id,
       integracao: "getnet",
       acao: `import_csv_${tipo_extrato}`,
       endpoint: "import-getnet-csv",
-      status: errors.length > 0 ? "erro_parcial" : "sucesso",
+      status: finalStatus,
       registros_processados: parsed.length,
       registros_criados: created,
       registros_ignorados: skipped,
       erros: errors.length > 0 ? errors : null,
       fim: new Date().toISOString(),
-      detalhes: { periodo: { inicio: periodoInicio, fim: periodoFim }, tipo_extrato },
+      detalhes: { periodo: { inicio: period_start, fim: period_end }, tipo_extrato, filename },
     });
 
     const totais = parsed.reduce(
@@ -284,24 +426,19 @@ Deno.serve(async (req) => {
       { bruto: 0, taxa: 0, liquido: 0 }
     );
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        created,
-        skipped,
-        errors,
-        total_transacoes: parsed.length,
-        periodo: { inicio: periodoInicio, fim: periodoFim },
-        totais,
-        arquivo_id: arquivoId,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({
+      ok: true,
+      imported_count,
+      duplicates_count,
+      period_start,
+      period_end,
+      import_run_id: importRunId,
+      total_transacoes: parsed.length,
+      totais,
+      errors: errors.length > 0 ? errors : undefined,
+    });
   } catch (e) {
     console.error("import-getnet-csv error:", e);
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: e.message }, 500);
   }
 });
