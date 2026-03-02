@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, LineChart, Line } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,8 +15,8 @@ interface Props {
   dateTo: Date;
 }
 
-interface MedicoReceita { nome: string; total: number }
-interface SalaReceita { nome: string; total: number }
+interface MedicoRow { nome: string; atend: number; receita: number; faltas: number; desconto: number }
+interface EspRow { nome: string; atend: number; receita: number }
 interface OcupacaoDia { dia: string; ocupacao: number }
 
 export default function TabOperacional({ dateFrom, dateTo }: Props) {
@@ -24,8 +25,12 @@ export default function TabOperacional({ dateFrom, dateTo }: Props) {
   const [folhaReceita, setFolhaReceita] = useState(0);
   const [ticketMedio, setTicketMedio] = useState(0);
   const [taxaFalta, setTaxaFalta] = useState(0);
-  const [medicoData, setMedicoData] = useState<MedicoReceita[]>([]);
-  const [salaData, setSalaData] = useState<SalaReceita[]>([]);
+  const [totalDesconto, setTotalDesconto] = useState(0);
+  const [pctDesconto, setPctDesconto] = useState(0);
+  const [totalAtend, setTotalAtend] = useState(0);
+  const [receitaTotal, setReceitaTotal] = useState(0);
+  const [medicoData, setMedicoData] = useState<MedicoRow[]>([]);
+  const [espData, setEspData] = useState<EspRow[]>([]);
   const [ocupacaoData, setOcupacaoData] = useState<OcupacaoDia[]>([]);
 
   useEffect(() => {
@@ -34,14 +39,26 @@ export default function TabOperacional({ dateFrom, dateTo }: Props) {
     const from = format(dateFrom, "yyyy-MM-dd");
     const to = format(dateTo, "yyyy-MM-dd");
 
+    // Try operacao_producao first, fallback to transacoes_vendas
+    const opQuery = supabase
+      .from("operacao_producao")
+      .select("valor_bruto, desconto, valor_liquido, status_presenca, medico_id, especialidade, medicos(nome)")
+      .eq("clinica_id", clinicaId)
+      .gte("data_competencia", from)
+      .lte("data_competencia", to);
+
+    const tvFallback = supabase
+      .from("transacoes_vendas")
+      .select("valor_bruto, desconto, status_presenca, medico_id, especialidade, medicos(nome)")
+      .eq("clinica_id", clinicaId)
+      .gte("data_competencia", from)
+      .lte("data_competencia", to)
+      .not("feegow_id", "like", "inv_%")
+      .limit(1000);
+
     Promise.all([
-      // Vendas para ticket médio e taxa de falta
-      supabase
-        .from("transacoes_vendas")
-        .select("valor_bruto, status_presenca, medico_id, sala_id, medicos(nome), salas:sala_id(nome)")
-        .eq("clinica_id", clinicaId)
-        .gte("data_competencia", from)
-        .lte("data_competencia", to),
+      opQuery,
+      tvFallback,
       // Folha (CP com categoria pessoal)
       supabase
         .from("contas_pagar_lancamentos")
@@ -58,41 +75,49 @@ export default function TabOperacional({ dateFrom, dateTo }: Props) {
         .gte("data", from)
         .lte("data", to)
         .order("data"),
-    ]).then(([vendasRes, cpRes, ocupRes]) => {
-      // Vendas
-      const vendas = (vendasRes.data || []) as any[];
-      const totalVendas = vendas.length;
-      const receitaTotal = vendas.reduce((s: number, v: any) => s + (v.valor_bruto || 0), 0);
-      setTicketMedio(totalVendas > 0 ? receitaTotal / totalVendas : 0);
+    ]).then(([opRes, tvRes, cpRes, ocupRes]) => {
+      // Use operacao_producao if available, otherwise fallback to transacoes_vendas
+      const rawOps = (opRes.data || []) as any[];
+      const ops = rawOps.length > 0 ? rawOps : ((tvRes.data || []) as any[]).map((v: any) => ({
+        ...v, desconto: v.desconto || 0, valor_liquido: (v.valor_bruto || 0) - (v.desconto || 0),
+      }));
+      const total = ops.length;
+      setTotalAtend(total);
 
-      const faltas = vendas.filter((v: any) => v.status_presenca === "faltou").length;
-      setTaxaFalta(totalVendas > 0 ? (faltas / totalVendas) * 100 : 0);
+      const receita = ops.reduce((s: number, v: any) => s + (v.valor_bruto || 0), 0);
+      setReceitaTotal(receita);
+      setTicketMedio(total > 0 ? receita / total : 0);
 
-      // Médico
-      const medMap = new Map<string, number>();
-      vendas.forEach((v: any) => {
-        const nome = v.medicos?.nome || "Sem médico";
-        medMap.set(nome, (medMap.get(nome) || 0) + (v.valor_bruto || 0));
+      const descontoTotal = ops.reduce((s: number, v: any) => s + (v.desconto || 0), 0);
+      setTotalDesconto(descontoTotal);
+      setPctDesconto(receita > 0 ? (descontoTotal / receita) * 100 : 0);
+
+      const faltas = ops.filter((v: any) => v.status_presenca === "faltou").length;
+      setTaxaFalta(total > 0 ? (faltas / total) * 100 : 0);
+
+      // Por Médico
+      const medMap = new Map<string, MedicoRow>();
+      ops.forEach((v: any) => {
+        const nome = v.medicos?.nome || "Sem profissional";
+        const e = medMap.get(nome) || { nome, atend: 0, receita: 0, faltas: 0, desconto: 0 };
+        e.atend++;
+        e.receita += v.valor_bruto || 0;
+        e.desconto += v.desconto || 0;
+        if (v.status_presenca === "faltou") e.faltas++;
+        medMap.set(nome, e);
       });
-      setMedicoData(
-        Array.from(medMap.entries())
-          .map(([nome, total]) => ({ nome, total }))
-          .sort((a, b) => b.total - a.total)
-          .slice(0, 10)
-      );
+      setMedicoData(Array.from(medMap.values()).sort((a, b) => b.receita - a.receita).slice(0, 15));
 
-      // Sala
-      const salaMap = new Map<string, number>();
-      vendas.forEach((v: any) => {
-        const nome = v.salas?.nome || "Sem sala";
-        salaMap.set(nome, (salaMap.get(nome) || 0) + (v.valor_bruto || 0));
+      // Por Especialidade
+      const eMap = new Map<string, EspRow>();
+      ops.forEach((v: any) => {
+        const nome = v.especialidade || "Geral";
+        const e = eMap.get(nome) || { nome, atend: 0, receita: 0 };
+        e.atend++;
+        e.receita += v.valor_bruto || 0;
+        eMap.set(nome, e);
       });
-      setSalaData(
-        Array.from(salaMap.entries())
-          .map(([nome, total]) => ({ nome, total }))
-          .sort((a, b) => b.total - a.total)
-          .slice(0, 10)
-      );
+      setEspData(Array.from(eMap.values()).sort((a, b) => b.receita - a.receita).slice(0, 10));
 
       // Folha / Receita
       const cp = (cpRes.data || []) as any[];
@@ -100,7 +125,7 @@ export default function TabOperacional({ dateFrom, dateTo }: Props) {
       const folha = cp
         .filter((l: any) => pessoal.includes(l.plano_contas?.categoria))
         .reduce((s: number, l: any) => s + (l.valor || 0), 0);
-      setFolhaReceita(receitaTotal > 0 ? (folha / receitaTotal) * 100 : 0);
+      setFolhaReceita(receita > 0 ? (folha / receita) * 100 : 0);
 
       // Ocupação
       const ocup = (ocupRes.data || []) as any[];
@@ -112,7 +137,7 @@ export default function TabOperacional({ dateFrom, dateTo }: Props) {
       );
 
       setLoading(false);
-    }).catch((e) => {
+    }).catch(() => {
       toast.error("Erro ao carregar dados operacionais");
       setLoading(false);
     });
@@ -128,34 +153,39 @@ export default function TabOperacional({ dateFrom, dateTo }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         {[
+          { label: "Total Atendimentos", value: totalAtend.toString() },
           { label: "Folha / Receita", value: `${folhaReceita.toFixed(1)}%` },
           { label: "Ticket Médio", value: fmt(ticketMedio) },
           { label: "Taxa de Falta", value: `${taxaFalta.toFixed(1)}%` },
+          { label: "Desconto Total", value: `${pctDesconto.toFixed(1)}% (${fmt(totalDesconto)})` },
         ].map((item) => (
           <Card key={item.label} className="border-0 shadow-md">
             <CardContent className="p-5">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{item.label}</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{item.value}</p>
+              <p className="mt-1 text-xl font-bold text-foreground">{item.value}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
+      {/* Charts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Receita por Especialidade */}
         <Card className="border-0 shadow-md">
-          <CardHeader><CardTitle className="text-lg">Receita por Médico</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-lg">Receita por Especialidade</CardTitle></CardHeader>
           <CardContent>
-            {medicoData.length > 0 ? (
+            {espData.length > 0 ? (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={medicoData} layout="vertical">
+                  <BarChart data={espData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                     <XAxis type="number" className="text-xs" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                     <YAxis type="category" dataKey="nome" className="text-xs" width={140} />
                     <Tooltip formatter={(v: number) => fmt(v)} />
-                    <Bar dataKey="total" name="Receita" fill="hsl(204, 67%, 32%)" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="receita" name="Receita" fill="hsl(152, 60%, 40%)" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -167,48 +197,63 @@ export default function TabOperacional({ dateFrom, dateTo }: Props) {
           </CardContent>
         </Card>
 
+        {/* Ocupação */}
         <Card className="border-0 shadow-md">
-          <CardHeader><CardTitle className="text-lg">Receita por Sala</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-lg">Taxa de Ocupação</CardTitle></CardHeader>
           <CardContent>
-            {salaData.length > 0 ? (
+            {ocupacaoData.length > 0 ? (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={salaData} layout="vertical">
+                  <LineChart data={ocupacaoData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis type="number" className="text-xs" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                    <YAxis type="category" dataKey="nome" className="text-xs" width={140} />
-                    <Tooltip formatter={(v: number) => fmt(v)} />
-                    <Bar dataKey="total" name="Receita" fill="hsl(152, 60%, 40%)" radius={[0, 4, 4, 0]} />
-                  </BarChart>
+                    <XAxis dataKey="dia" className="text-xs" />
+                    <YAxis className="text-xs" domain={[0, 100]} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="ocupacao" name="Ocupação %" stroke="hsl(204, 67%, 32%)" strokeWidth={2} />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             ) : (
               <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                Sincronize com o Feegow para ver dados
+                Sincronize com o Feegow para ver dados de ocupação
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
+      {/* Ranking por Médico */}
       <Card className="border-0 shadow-md">
-        <CardHeader><CardTitle className="text-lg">Taxa de Ocupação</CardTitle></CardHeader>
-        <CardContent>
-          {ocupacaoData.length > 0 ? (
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={ocupacaoData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="dia" className="text-xs" />
-                  <YAxis className="text-xs" domain={[0, 100]} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="ocupacao" name="Ocupação %" stroke="hsl(204, 67%, 32%)" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+        <CardHeader><CardTitle className="text-lg">Produtividade por Profissional</CardTitle></CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          {medicoData.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Profissional</TableHead>
+                  <TableHead className="text-right">Atendimentos</TableHead>
+                  <TableHead className="text-right">Receita</TableHead>
+                  <TableHead className="text-right">Ticket Médio</TableHead>
+                  <TableHead className="text-right">Faltas</TableHead>
+                  <TableHead className="text-right">Desconto</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {medicoData.map((m) => (
+                  <TableRow key={m.nome}>
+                    <TableCell className="font-medium">{m.nome}</TableCell>
+                    <TableCell className="text-right">{m.atend}</TableCell>
+                    <TableCell className="text-right">{fmt(m.receita)}</TableCell>
+                    <TableCell className="text-right">{fmt(m.atend > 0 ? m.receita / m.atend : 0)}</TableCell>
+                    <TableCell className="text-right">{m.faltas}</TableCell>
+                    <TableCell className="text-right">{fmt(m.desconto)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
             <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-              Sincronize com o Feegow para ver dados de ocupação
+              Sincronize com o Feegow para ver dados
             </div>
           )}
         </CardContent>

@@ -555,6 +555,110 @@ async function syncPeriod(
   return stats;
 }
 
+// ─── SYNC MEDICAL TRANSFERS (Repasses Médicos → CP) ───────────
+async function syncMedicalTransfers(
+  supabase: any, clinicaId: string, headers: Record<string, string>,
+  dateStart: string, dateEnd: string,
+) {
+  const stats = { processados: 0, criados: 0, ignorados: 0, erros: [] as string[] };
+  const logId = await createLog(supabase, clinicaId, "feegow_transfers", "sync_medical_transfers", "financial/list-medical-transfer");
+
+  try {
+    const fd = toFeegowDate(dateStart);
+    const td = toFeegowDate(dateEnd);
+    const url = `${FEEGOW_BASE}/financial/list-medical-transfer?data_start=${fd}&data_end=${td}`;
+    const data = await feegowFetch(url, headers);
+    const transfers = Array.isArray(data.content) ? data.content : [];
+    stats.processados = transfers.length;
+
+    if (transfers.length === 0) {
+      await finishLog(supabase, logId, "sucesso", stats);
+      return stats;
+    }
+
+    // Find plano_contas for "MÃO DE OBRA MÉDICA E TERAPÊUTICA" (code 19.1)
+    const { data: planoRow } = await supabase
+      .from("plano_contas")
+      .select("id")
+      .eq("clinica_id", clinicaId)
+      .eq("codigo_estruturado", "19.1")
+      .maybeSingle();
+    const planoContasId = planoRow?.id || null;
+
+    // Lookup medicos
+    const { data: medicos } = await supabase
+      .from("medicos")
+      .select("id, feegow_id, nome")
+      .eq("clinica_id", clinicaId);
+    const medMap = new Map<string, { id: string; nome: string }>();
+    for (const m of (medicos || [])) if (m.feegow_id) medMap.set(m.feegow_id, { id: m.id, nome: m.nome });
+
+    const batch: any[] = [];
+    for (const t of transfers) {
+      // Values from Feegow are in CENTAVOS → convert to reais
+      const valorCentavos = Number(t.valor || t.amount || t.value || 0);
+      const valor = valorCentavos / 100;
+      if (valor <= 0) { stats.ignorados++; continue; }
+
+      const profFid = String(t.profissional_id || t.professional_id || t.doctor_id || "");
+      const med = profFid ? medMap.get(profFid) : null;
+      const dataRef = t.data || t.date || t.timestamp || dateStart;
+      const dataComp = typeof dataRef === "string" ? dataRef.split(" ")[0] : dateStart;
+      // Convert DD-MM-YYYY to YYYY-MM-DD if needed
+      let dataCompIso = dataComp;
+      if (dataComp.includes("-") && dataComp.split("-")[0].length === 2) {
+        const [d, m, y] = dataComp.split("-");
+        dataCompIso = `${y}-${m}-${d}`;
+      }
+
+      const fgId = `transfer_${t.id || t.transfer_id || `${profFid}_${dataCompIso}`}`;
+
+      batch.push({
+        clinica_id: clinicaId,
+        data_competencia: dataCompIso,
+        ref_dia_trabalhado: dataCompIso,
+        valor,
+        descricao: `Repasse médico - ${med?.nome || profFid} ref:${dataCompIso}`,
+        fornecedor: med?.nome || `Médico ${profFid}`,
+        medico_id: med?.id || null,
+        plano_contas_id: planoContasId,
+        tipo_despesa: "variavel" as any,
+        status: "pendente_conciliacao" as any,
+        ofx_transaction_id: fgId,
+      });
+    }
+
+    // Upsert using ofx_transaction_id as idempotency key
+    const BATCH = 50;
+    for (let i = 0; i < batch.length; i += BATCH) {
+      const chunk = batch.slice(i, i + BATCH);
+      for (const record of chunk) {
+        const { data: existing } = await supabase
+          .from("contas_pagar_lancamentos")
+          .select("id")
+          .eq("clinica_id", clinicaId)
+          .eq("ofx_transaction_id", record.ofx_transaction_id)
+          .maybeSingle();
+        if (existing) {
+          stats.ignorados++;
+        } else {
+          const { error } = await supabase.from("contas_pagar_lancamentos").insert(record);
+          if (error) stats.erros.push(`Transfer ${record.ofx_transaction_id}: ${error.message}`);
+          else stats.criados++;
+        }
+      }
+    }
+
+    await finishLog(supabase, logId, stats.erros.length > 0 ? "erro_parcial" : "sucesso", {
+      processados: stats.processados, criados: stats.criados, ignorados: stats.ignorados, erros: stats.erros,
+    });
+  } catch (e: any) {
+    stats.erros.push(e.message);
+    await finishLog(supabase, logId, "erro", stats);
+  }
+  return stats;
+}
+
 // ─── MAIN HANDLER ──────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -613,6 +717,14 @@ Deno.serve(async (req) => {
         totalStats.erros.push(...result.erros);
       }
       response.sales = { ...totalStats, chunks_count: chunks.length };
+    }
+
+    // Sync medical transfers (repasses médicos → CP)
+    if (action === "full" || action === "transfers") {
+      const end = body.date_end || new Date().toISOString().split("T")[0];
+      const start = body.date_start || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+      const transferResult = await syncMedicalTransfers(supabase, clinicaId, feegowHeaders, start, end);
+      response.transfers = transferResult;
     }
 
     await supabase.from("integracoes").upsert({
