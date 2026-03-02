@@ -30,6 +30,41 @@ function safeError(e: unknown): { message: string; name: string; stack_first_300
   return { message: String(e), name: "UnknownError", stack_first_300: "" };
 }
 
+const VALID_FORMA_PAGAMENTO = new Set([
+  "pix","dinheiro","convenio_nf","cartao_credito","cartao_debito",
+  "boleto","transferencia","debito_automatico","ted_doc","outros",
+]);
+
+const FORMA_PAGAMENTO_MAP: Record<string, string> = {
+  "pix": "pix", "pix qrcode": "pix", "pix qr": "pix", "pix chave": "pix",
+  "boleto": "boleto", "boleto bancario": "boleto", "boleto bancário": "boleto",
+  "bol": "boleto", "pagamento boleto": "boleto",
+  "cartao": "cartao_credito", "cartão": "cartao_credito", "credito": "cartao_credito",
+  "crédito": "cartao_credito", "cartao credito": "cartao_credito", "cartão crédito": "cartao_credito",
+  "cartao_credito": "cartao_credito",
+  "debito": "cartao_debito", "débito": "cartao_debito", "cartao debito": "cartao_debito",
+  "cartão débito": "cartao_debito", "cartao_debito": "cartao_debito",
+  "transferencia": "transferencia", "transferência": "transferencia",
+  "ted": "ted_doc", "doc": "ted_doc", "ted/doc": "ted_doc", "ted_doc": "ted_doc",
+  "debito automatico": "debito_automatico", "débito automático": "debito_automatico",
+  "debito_automatico": "debito_automatico",
+  "dinheiro": "dinheiro", "especie": "dinheiro", "espécie": "dinheiro",
+  "convenio_nf": "convenio_nf", "convenio": "convenio_nf",
+};
+
+function normalizeFormaPagamento(raw: string | null | undefined): { normalized: string | null; raw_value: string | null } {
+  if (!raw) return { normalized: null, raw_value: null };
+  const lower = raw.trim().toLowerCase().replace(/[_\-]+/g, " ").replace(/\s+/g, " ");
+  const mapped = FORMA_PAGAMENTO_MAP[lower];
+  if (mapped) return { normalized: mapped, raw_value: null };
+  if (VALID_FORMA_PAGAMENTO.has(lower)) return { normalized: lower, raw_value: null };
+  // Partial match
+  for (const [key, val] of Object.entries(FORMA_PAGAMENTO_MAP)) {
+    if (lower.includes(key) || key.includes(lower)) return { normalized: val, raw_value: raw };
+  }
+  return { normalized: "outros", raw_value: raw };
+}
+
 function arrayBufferToBase64(buffer: Uint8Array): string {
   const CHUNK = 8192;
   let binary = "";
@@ -257,6 +292,12 @@ ${tipo ? `Tipo: "${tipo}"` : ""}`;
     // Update comprovante
     await supabase.from("comprovantes").update({ status: "processado", dados_extraidos: extracted }).eq("id", comprovante_id);
 
+    // Normalize forma_pagamento
+    const { normalized: formaPag, raw_value: formaPagRaw } = normalizeFormaPagamento(extracted.forma_pagamento);
+    if (formaPagRaw) {
+      console.warn(`forma_pagamento normalizada: "${extracted.forma_pagamento}" → "outros" (raw salvo)`);
+    }
+
     // Create lançamento
     const { data: lancamento, error: lancErr } = await supabase
       .from("contas_pagar_lancamentos")
@@ -268,7 +309,8 @@ ${tipo ? `Tipo: "${tipo}"` : ""}`;
         valor: extracted.valor || 0,
         data_competencia: extracted.data_pagamento || new Date().toISOString().split("T")[0],
         data_pagamento: extracted.data_pagamento || null,
-        forma_pagamento: extracted.forma_pagamento || null,
+        forma_pagamento: formaPag,
+        forma_pagamento_raw: formaPagRaw,
         canal_pagamento: extracted.canal_pagamento || null,
         banco_referencia: extracted.banco_referencia || null,
         comprovante_id,
