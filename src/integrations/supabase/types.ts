@@ -692,6 +692,7 @@ export type Database = {
           data_vencimento: string | null
           descricao: string | null
           forma_pagamento: Database["public"]["Enums"]["forma_pagamento"] | null
+          forma_pagamento_raw: string | null
           fornecedor: string | null
           id: string
           medico_id: string | null
@@ -719,6 +720,7 @@ export type Database = {
           forma_pagamento?:
             | Database["public"]["Enums"]["forma_pagamento"]
             | null
+          forma_pagamento_raw?: string | null
           fornecedor?: string | null
           id?: string
           medico_id?: string | null
@@ -746,6 +748,7 @@ export type Database = {
           forma_pagamento?:
             | Database["public"]["Enums"]["forma_pagamento"]
             | null
+          forma_pagamento_raw?: string | null
           fornecedor?: string | null
           id?: string
           medico_id?: string | null
@@ -3705,6 +3708,11 @@ export type Database = {
         | "convenio_nf"
         | "cartao_credito"
         | "cartao_debito"
+        | "boleto"
+        | "transferencia"
+        | "debito_automatico"
+        | "ted_doc"
+        | "outros"
       indicador_plano: "credito" | "debito"
       linha_receita:
         | "prestacao_servicos"
@@ -3924,6 +3932,11 @@ export const Constants = {
         "convenio_nf",
         "cartao_credito",
         "cartao_debito",
+        "boleto",
+        "transferencia",
+        "debito_automatico",
+        "ted_doc",
+        "outros",
       ],
       indicador_plano: ["credito", "debito"],
       linha_receita: [
