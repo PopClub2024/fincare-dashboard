@@ -404,6 +404,24 @@ async function importRepassesMedicos(supabase: any, body: any) {
   return jsonResponse({ success: criados > 0, import_run_id: run?.id, criados, rejeitados, erros });
 }
 
+// ─── Action: sync_feegow ────────────────────────────────────────
+async function syncFeegow(supabase: any, supabaseUrl: string, serviceKey: string, body: any) {
+  const { clinica_id, unidade_id, date_start, date_end } = body;
+  if (!clinica_id || !date_start || !date_end) {
+    return jsonResponse({ error: "clinica_id, date_start, date_end obrigatórios" }, 400);
+  }
+
+  const result = await callEdgeFunction(supabaseUrl, serviceKey, "sync-feegow", {
+    clinica_id,
+    unidade_id: unidade_id || null,
+    action: "full",
+    date_start,
+    date_end,
+  });
+
+  return jsonResponse({ success: result.ok, ...result.data });
+}
+
 // ─── Action: autopilot_run ──────────────────────────────────────
 async function autopilotRun(supabase: any, supabaseUrl: string, serviceKey: string, body: any) {
   const { clinica_id } = body;
@@ -489,6 +507,7 @@ Deno.serve(async (req) => {
         error: "action obrigatório",
         actions_disponiveis: [
           "feegow_run_month",
+          "sync_feegow",
           "import_bank_statement",
           "import_getnet_statement",
           "run_reconciliation",
@@ -505,6 +524,9 @@ Deno.serve(async (req) => {
     switch (action) {
       case "feegow_run_month":
         response = await feegowRunMonth(supabase, supabaseUrl, serviceKey, body);
+        break;
+      case "sync_feegow":
+        response = await syncFeegow(supabase, supabaseUrl, serviceKey, body);
         break;
       case "import_bank_statement":
         response = await importBankStatement(supabase, supabaseUrl, serviceKey, body);
