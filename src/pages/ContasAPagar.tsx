@@ -51,6 +51,7 @@ interface Lancamento {
   forma_pagamento: string | null;
   plano_contas_id: string | null;
   ofx_transaction_id: string | null;
+  banco_referencia: string | null;
   plano_contas?: { codigo_estruturado: string; descricao: string; categoria: string } | null;
 }
 
@@ -318,12 +319,13 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
           ) : filtered.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground">Nenhum lançamento encontrado.</div>
           ) : (
-            <Table>
+             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Descrição</TableHead>
                   <TableHead>Fornecedor</TableHead>
+                  <TableHead>Banco</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Status</TableHead>
@@ -335,12 +337,41 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                     <TableCell className="whitespace-nowrap">{new Date(l.data_competencia + "T12:00:00").toLocaleDateString("pt-BR")}</TableCell>
                     <TableCell className="font-medium max-w-[200px] truncate">{l.descricao || "—"}</TableCell>
                     <TableCell>{l.fornecedor || "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{l.banco_referencia || "—"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {l.plano_contas ? `${l.plano_contas.codigo_estruturado} - ${l.plano_contas.descricao}` : "—"}
                     </TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(l.valor)}</TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant(l.status)}>{statusLabel[l.status] || l.status}</Badge>
+                      <Select
+                        value={l.status}
+                        onValueChange={async (newStatus) => {
+                          const { error } = await supabase
+                            .from("contas_pagar_lancamentos")
+                            .update({ status: newStatus as any })
+                            .eq("id", l.id);
+                          if (error) toast.error(error.message);
+                          else {
+                            setLancamentos((prev) =>
+                              prev.map((item) => item.id === l.id ? { ...item, status: newStatus } : item)
+                            );
+                            toast.success("Status atualizado");
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-7 w-[140px] text-xs">
+                          <Badge variant={statusVariant(l.status)} className="text-xs">
+                            {statusLabel[l.status] || l.status}
+                          </Badge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="a_classificar">A Classificar</SelectItem>
+                          <SelectItem value="classificado">Classificado</SelectItem>
+                          <SelectItem value="pago">Pago</SelectItem>
+                          <SelectItem value="cancelado">Cancelado</SelectItem>
+                          <SelectItem value="pendente_conciliacao">Pend. Conciliação</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -481,28 +512,14 @@ function TabConciliacao() {
       });
       if (error) throw error;
 
-      // Check if file was already processed (idempotency)
       if (data.message && data.imported_count === 0) {
-        setLastResult({
-          total: data.duplicates_count ?? 0,
-          created: 0,
-          matched: 0,
-          skipped: data.duplicates_count ?? 0,
-          errors: [],
-          alreadyImported: true,
-        });
-        toast.warning("Este arquivo já foi importado anteriormente. As transações já estão no sistema.");
+        setLastResult({ ...data, alreadyImported: true });
+        toast.warning("Este arquivo já foi importado anteriormente.");
       } else {
-        const normalized = {
-          total: (data.imported_count ?? 0) + (data.duplicates_count ?? 0),
-          created: data.imported_count ?? data.created ?? 0,
-          matched: data.matched ?? 0,
-          skipped: data.duplicates_count ?? data.skipped ?? 0,
-          errors: data.errors ?? [],
-          alreadyImported: false,
-        };
-        setLastResult(normalized);
-        toast.success(`OFX importado! ${normalized.created} registros importados.`);
+        setLastResult({ ...data, alreadyImported: false });
+        toast.success(
+          `OFX importado! ${data.debitos_criados ?? 0} débitos (AP), ${data.creditos_criados ?? 0} créditos (AR), ${data.matched_ap ?? 0} conciliados.`
+        );
       }
     } catch (err: any) {
       toast.error("Erro na importação: " + err.message);
@@ -541,29 +558,36 @@ function TabConciliacao() {
                   <>
                     <h4 className="font-semibold text-sm mb-2 text-amber-700">⚠️ Arquivo já importado</h4>
                     <p className="text-sm text-muted-foreground">
-                      Este extrato ({lastResult.total} transações) já foi processado anteriormente. 
-                      As transações já estão cadastradas no sistema. Para reimportar, use um arquivo diferente.
+                      Este extrato ({lastResult.duplicates_count ?? 0} transações) já foi processado. 
+                      As transações já estão no sistema.
                     </p>
                   </>
                 ) : (
                   <>
                     <h4 className="font-semibold text-sm mb-2">Resultado da importação</h4>
-                    <div className="grid grid-cols-4 gap-4 text-sm">
+                    {lastResult.banco && (
+                      <p className="text-xs text-muted-foreground mb-2">Banco: <span className="font-medium text-foreground">{lastResult.banco}</span></p>
+                    )}
+                    <div className="grid grid-cols-5 gap-3 text-sm">
                       <div>
                         <p className="text-muted-foreground">Total</p>
-                        <p className="text-lg font-bold">{lastResult.total}</p>
+                        <p className="text-lg font-bold">{lastResult.imported_count + (lastResult.duplicates_count || 0)}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Criados</p>
-                        <p className="text-lg font-bold text-primary">{lastResult.created}</p>
+                        <p className="text-muted-foreground">Débitos (AP)</p>
+                        <p className="text-lg font-bold text-primary">{lastResult.debitos_criados ?? 0}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Créditos (AR)</p>
+                        <p className="text-lg font-bold text-secondary">{lastResult.creditos_criados ?? 0}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Conciliados</p>
-                        <p className="text-lg font-bold text-secondary">{lastResult.matched}</p>
+                        <p className="text-lg font-bold text-emerald-600">{(lastResult.matched_ap ?? 0) + (lastResult.matched_ar ?? 0)}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Ignorados</p>
-                        <p className="text-lg font-bold text-muted-foreground">{lastResult.skipped}</p>
+                        <p className="text-muted-foreground">Duplicados</p>
+                        <p className="text-lg font-bold text-muted-foreground">{lastResult.duplicates_count ?? 0}</p>
                       </div>
                     </div>
                     {lastResult.errors?.length > 0 && (
