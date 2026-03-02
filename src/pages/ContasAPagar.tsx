@@ -480,16 +480,30 @@ function TabConciliacao() {
         body: { clinica_id: clinicaId, ofx_content: text },
       });
       if (error) throw error;
-      // Normalize response keys for the UI
-      const normalized = {
-        total: (data.imported_count ?? 0) + (data.duplicates_count ?? 0),
-        created: data.imported_count ?? data.created ?? 0,
-        matched: data.matched ?? 0,
-        skipped: data.duplicates_count ?? data.skipped ?? 0,
-        errors: data.errors ?? [],
-      };
-      setLastResult(normalized);
-      toast.success(`OFX importado! ${normalized.created} registros importados.`);
+
+      // Check if file was already processed (idempotency)
+      if (data.message && data.imported_count === 0) {
+        setLastResult({
+          total: data.duplicates_count ?? 0,
+          created: 0,
+          matched: 0,
+          skipped: data.duplicates_count ?? 0,
+          errors: [],
+          alreadyImported: true,
+        });
+        toast.warning("Este arquivo já foi importado anteriormente. As transações já estão no sistema.");
+      } else {
+        const normalized = {
+          total: (data.imported_count ?? 0) + (data.duplicates_count ?? 0),
+          created: data.imported_count ?? data.created ?? 0,
+          matched: data.matched ?? 0,
+          skipped: data.duplicates_count ?? data.skipped ?? 0,
+          errors: data.errors ?? [],
+          alreadyImported: false,
+        };
+        setLastResult(normalized);
+        toast.success(`OFX importado! ${normalized.created} registros importados.`);
+      }
     } catch (err: any) {
       toast.error("Erro na importação: " + err.message);
     } finally {
@@ -521,31 +535,43 @@ function TabConciliacao() {
           </div>
 
           {lastResult && (
-            <Card className="border-secondary/30 bg-accent/30">
+            <Card className={`border-secondary/30 ${lastResult.alreadyImported ? 'bg-amber-500/10' : 'bg-accent/30'}`}>
               <CardContent className="p-4">
-                <h4 className="font-semibold text-sm mb-2">Resultado da importação</h4>
-                <div className="grid grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Total</p>
-                    <p className="text-lg font-bold">{lastResult.total}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Criados</p>
-                    <p className="text-lg font-bold text-primary">{lastResult.created}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Conciliados</p>
-                    <p className="text-lg font-bold text-secondary">{lastResult.matched}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Ignorados</p>
-                    <p className="text-lg font-bold text-muted-foreground">{lastResult.skipped}</p>
-                  </div>
-                </div>
-                {lastResult.errors?.length > 0 && (
-                  <div className="mt-3 rounded bg-destructive/10 p-2 text-xs text-destructive">
-                    {lastResult.errors.map((e: string, i: number) => <p key={i}>{e}</p>)}
-                  </div>
+                {lastResult.alreadyImported ? (
+                  <>
+                    <h4 className="font-semibold text-sm mb-2 text-amber-700">⚠️ Arquivo já importado</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Este extrato ({lastResult.total} transações) já foi processado anteriormente. 
+                      As transações já estão cadastradas no sistema. Para reimportar, use um arquivo diferente.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h4 className="font-semibold text-sm mb-2">Resultado da importação</h4>
+                    <div className="grid grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Total</p>
+                        <p className="text-lg font-bold">{lastResult.total}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Criados</p>
+                        <p className="text-lg font-bold text-primary">{lastResult.created}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Conciliados</p>
+                        <p className="text-lg font-bold text-secondary">{lastResult.matched}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Ignorados</p>
+                        <p className="text-lg font-bold text-muted-foreground">{lastResult.skipped}</p>
+                      </div>
+                    </div>
+                    {lastResult.errors?.length > 0 && (
+                      <div className="mt-3 rounded bg-destructive/10 p-2 text-xs text-destructive">
+                        {lastResult.errors.map((e: string, i: number) => <p key={i}>{e}</p>)}
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
