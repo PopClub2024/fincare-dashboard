@@ -1068,7 +1068,9 @@ export type Database = {
           id: string
           meio: Database["public"]["Enums"]["meio_recebimento"]
           nf_id: string | null
+          origem_dado: Database["public"]["Enums"]["origem_dado_cr"] | null
           origem_ref: Json | null
+          referencias_json: Json | null
           status: Database["public"]["Enums"]["status_recebivel_agg"]
           tipo_recebivel: Database["public"]["Enums"]["tipo_recebivel"]
           updated_at: string
@@ -1087,7 +1089,9 @@ export type Database = {
           id?: string
           meio: Database["public"]["Enums"]["meio_recebimento"]
           nf_id?: string | null
+          origem_dado?: Database["public"]["Enums"]["origem_dado_cr"] | null
           origem_ref?: Json | null
+          referencias_json?: Json | null
           status?: Database["public"]["Enums"]["status_recebivel_agg"]
           tipo_recebivel: Database["public"]["Enums"]["tipo_recebivel"]
           updated_at?: string
@@ -1106,7 +1110,9 @@ export type Database = {
           id?: string
           meio?: Database["public"]["Enums"]["meio_recebimento"]
           nf_id?: string | null
+          origem_dado?: Database["public"]["Enums"]["origem_dado_cr"] | null
           origem_ref?: Json | null
+          referencias_json?: Json | null
           status?: Database["public"]["Enums"]["status_recebivel_agg"]
           tipo_recebivel?: Database["public"]["Enums"]["tipo_recebivel"]
           updated_at?: string
@@ -4449,6 +4455,15 @@ export type Database = {
         | "pix"
         | "dinheiro"
         | "convenio"
+        | "boleto"
+        | "transferencia"
+        | "outros"
+      origem_dado_cr:
+        | "feegow_caixa"
+        | "feegow_invoice"
+        | "getnet_vendas"
+        | "banco_credito"
+        | "manual"
       origem_pagamento: "extrato" | "manual"
       origem_preco: "importado_planilha" | "manual" | "sync_feegow"
       severidade_alerta: "info" | "warning" | "critical"
@@ -4711,6 +4726,16 @@ export const Constants = {
         "pix",
         "dinheiro",
         "convenio",
+        "boleto",
+        "transferencia",
+        "outros",
+      ],
+      origem_dado_cr: [
+        "feegow_caixa",
+        "feegow_invoice",
+        "getnet_vendas",
+        "banco_credito",
+        "manual",
       ],
       origem_pagamento: ["extrato", "manual"],
       origem_preco: ["importado_planilha", "manual", "sync_feegow"],
