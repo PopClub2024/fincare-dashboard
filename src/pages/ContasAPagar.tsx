@@ -480,8 +480,16 @@ function TabConciliacao() {
         body: { clinica_id: clinicaId, ofx_content: text },
       });
       if (error) throw error;
-      setLastResult(data);
-      toast.success(`OFX importado! ${data.created} criados, ${data.matched} conciliados.`);
+      // Normalize response keys for the UI
+      const normalized = {
+        total: (data.imported_count ?? 0) + (data.duplicates_count ?? 0),
+        created: data.imported_count ?? data.created ?? 0,
+        matched: data.matched ?? 0,
+        skipped: data.duplicates_count ?? data.skipped ?? 0,
+        errors: data.errors ?? [],
+      };
+      setLastResult(normalized);
+      toast.success(`OFX importado! ${normalized.created} registros importados.`);
     } catch (err: any) {
       toast.error("Erro na importação: " + err.message);
     } finally {
