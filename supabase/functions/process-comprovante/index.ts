@@ -77,9 +77,9 @@ function normalizeFormaPagamento(raw: string | null | undefined): { normalized: 
   return { normalized: null, raw_value: raw };
 }
 
-const VALID_TIPO_DESPESA = new Set(["fixo", "variavel"]);
+const VALID_TIPO_DESPESA = new Set(["fixa", "variavel"]);
 const TIPO_DESPESA_MAP: Record<string, string> = {
-  "fixo": "fixo", "fixa": "fixo", "custo fixo": "fixo", "fixos": "fixo",
+  "fixo": "fixa", "fixa": "fixa", "custo fixo": "fixa", "fixos": "fixa", "fixas": "fixa",
   "variavel": "variavel", "variável": "variavel", "variáveis": "variavel",
   "custo variavel": "variavel", "custo variável": "variavel", "variaveis": "variavel",
 };
