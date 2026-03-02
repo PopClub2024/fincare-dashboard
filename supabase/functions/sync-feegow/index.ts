@@ -112,7 +112,6 @@ async function buildLookupMaps(supabase: any, clinicaId: string, headers: Record
 }
 
 // ─── Payment form mapping (Feegow forma_pagamento IDs) ─────────
-// Feegow docs: 1=Dinheiro, 4=Boleto, 8=CartãoCrédito, 9=CartãoDébito, 15=PIX
 function mapFormaPagamento(feegowId: number | null, description?: any): string | null {
   const map: Record<number, string> = {
     1: "dinheiro", 2: "cartao_credito", 3: "cartao_debito",
@@ -147,6 +146,17 @@ function mapFormaPagamentoToMeio(fpId: number | null, fpDesc?: string): string {
   return "outros";
 }
 
+// ─── Bandeira mapping from Feegow IDs ──────────────────────────
+function mapBandeira(bandeiraId: number | null, bandeiraNome?: string): string | null {
+  if (bandeiraNome) return bandeiraNome;
+  const map: Record<number, string> = {
+    1: "Visa", 2: "Mastercard", 3: "Elo", 4: "Amex",
+    5: "Hipercard", 6: "Diners", 7: "Sorocred",
+  };
+  if (bandeiraId && map[bandeiraId]) return map[bandeiraId];
+  return null;
+}
+
 // ─── SYNC METADATA ─────────────────────────────────────────────
 async function syncMetadata(supabase: any, clinicaId: string, headers: Record<string, string>) {
   const result = { medicos: 0, salas: 0, convenios: 0, errors: [] as string[] };
@@ -178,12 +188,6 @@ async function syncMetadata(supabase: any, clinicaId: string, headers: Record<st
   try {
     const data = await feegowFetch(`${FEEGOW_BASE}/insurance/list`, headers);
     const insurances = data.content || [];
-    if (Array.isArray(insurances) && insurances.length > 0) {
-      console.log("INSURANCE SAMPLE:", JSON.stringify(insurances[0]));
-    } else if (insurances && typeof insurances === "object") {
-      const firstKey = Object.keys(insurances)[0];
-      if (firstKey) console.log("INSURANCE SAMPLE (obj):", JSON.stringify({ key: firstKey, val: insurances[firstKey] }));
-    }
     const insList = Array.isArray(insurances) ? insurances : Object.values(insurances).flat();
     for (const ins of insList) {
       const fid = String(ins.convenio_id || ins.insurance_id || ins.id || "");
@@ -240,14 +244,14 @@ async function fetchAllSales(headers: Record<string, string>, dateStart: string,
 }
 
 // ─── Fetch ALL invoices with pagination ────────────────────────
-async function fetchAllInvoices(headers: Record<string, string>, dateStart: string, dateEnd: string): Promise<any[]> {
+async function fetchAllInvoices(headers: Record<string, string>, dateStart: string, dateEnd: string, extraParams = ""): Promise<any[]> {
   const fd = toFeegowDate(dateStart);
   const td = toFeegowDate(dateEnd);
   const all: any[] = [];
   let page = 1;
   while (page <= 20) {
     try {
-      const url = `${FEEGOW_BASE}/financial/list-invoice?data_start=${fd}&data_end=${td}&unidade_id=0&page=${page}&perPage=500`;
+      const url = `${FEEGOW_BASE}/financial/list-invoice?data_start=${fd}&data_end=${td}&unidade_id=0${extraParams}&page=${page}&perPage=500`;
       const data = await feegowFetch(url, headers);
       const items = Array.isArray(data.content) ? data.content : [];
       if (items.length === 0) break;
@@ -260,6 +264,27 @@ async function fetchAllInvoices(headers: Record<string, string>, dateStart: stri
     }
   }
   return all;
+}
+
+// ─── Parse Feegow date (DD-MM-YYYY or YYYY-MM-DD) to ISO ──────
+function parseFeegowDateToIso(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const d = String(raw).split(" ")[0];
+  if (!d) return null;
+  if (d.includes("-") && d.split("-")[0].length === 2) {
+    const [dd, mm, yy] = d.split("-");
+    return `${yy}-${mm}-${dd}`;
+  }
+  return d;
+}
+
+// ─── Parse Feegow value (may be centavos or BRL) ───────────────
+function parseFeegowValue(v: any, divideBy100 = false): number {
+  if (v == null) return 0;
+  if (typeof v === "number") return divideBy100 ? v / 100 : v;
+  const s = String(v).replace(/[R$\s.]/g, "").replace(",", ".");
+  const n = Number(s) || 0;
+  return divideBy100 ? n / 100 : n;
 }
 
 // ─── MAIN SYNC: Appoints primary + Sales for financial values ──
@@ -320,17 +345,6 @@ async function syncPeriod(
     const operacaoBatch: any[] = [];
     const seenFeegow = new Set<string>();
 
-    if (appoints.length > 0) {
-      const sample = appoints[0];
-      console.log("APPT SAMPLE valor fields:", JSON.stringify({
-        valor: sample.valor, valor_total_agendamento: sample.valor_total_agendamento,
-        procedimento_id: sample.procedimento_id,
-      }));
-    }
-    if (sales.length > 0) {
-      console.log("SALE SAMPLE:", JSON.stringify(sales[0]));
-    }
-
     for (const appt of appoints) {
       const feegowId = String(appt.agendamento_id || appt.id || "");
       if (!feegowId || seenFeegow.has(feegowId)) continue;
@@ -340,12 +354,8 @@ async function syncPeriod(
       let dataComp = dateStart;
       const rawDate = appt.data || appt.date || "";
       if (rawDate) {
-        if (rawDate.includes("-") && rawDate.split("-")[0].length === 2) {
-          const [d, m, y] = rawDate.split("-");
-          dataComp = `${y}-${m}-${d}`;
-        } else if (rawDate.includes("-")) {
-          dataComp = rawDate.split(" ")[0];
-        }
+        const parsed = parseFeegowDateToIso(rawDate);
+        if (parsed) dataComp = parsed;
       }
 
       const profFid = String(appt.profissional_id || appt.professional_id || "");
@@ -401,13 +411,7 @@ async function syncPeriod(
         continue;
       }
 
-      const parseBRCurrency = (v: any): number => {
-        if (v == null) return 0;
-        if (typeof v === "number") return v;
-        const s = String(v).replace(/[R$\s.]/g, "").replace(",", ".");
-        return Number(s) || 0;
-      };
-      let valorBruto = parseBRCurrency(appt.valor_total_agendamento) || parseBRCurrency(appt.valor);
+      let valorBruto = parseFeegowValue(appt.valor_total_agendamento) || parseFeegowValue(appt.valor);
       let invoiceId: string | null = null;
       if (valorBruto <= 0) {
         const dateSales = salesByDate.get(dataComp) || [];
@@ -586,19 +590,30 @@ async function syncPeriod(
 }
 
 // ─── SYNC RECEBIVEIS AGREGADOS (Feegow list-invoice → contas_receber_agregado) ──
+// This uses list-invoice broadly (origem_dado = feegow_invoice)
 async function syncRecebiveisAgregados(
   supabase: any, clinicaId: string, headers: Record<string, string>,
   dateStart: string, dateEnd: string,
+  origemDado: string = "feegow_invoice",
 ) {
   const stats = { processados: 0, criados: 0, atualizados: 0, ignorados: 0, erros: [] as string[], detalhes: {} as any };
-  const logId = await createLog(supabase, clinicaId, "feegow_recebiveis", "sync_recebiveis_agregados", "financial/list-invoice");
+  const logId = await createLog(supabase, clinicaId, "feegow_recebiveis", `sync_recebiveis_${origemDado}`, "financial/list-invoice");
 
   try {
-    const invoices = await fetchAllInvoices(headers, dateStart, dateEnd);
+    // For feegow_caixa, use tipo_conta=7 (Caixa)
+    const extraParams = origemDado === "feegow_caixa" ? "&tipo_conta=7" : "";
+    const invoices = await fetchAllInvoices(headers, dateStart, dateEnd, extraParams);
     stats.detalhes.invoices_count = invoices.length;
-    console.log(`Fetched ${invoices.length} invoices from Feegow for ${dateStart} to ${dateEnd}`);
+    console.log(`Fetched ${invoices.length} invoices (${origemDado}) from Feegow for ${dateStart} to ${dateEnd}`);
 
     if (invoices.length === 0) {
+      // Fallback: aggregate from transacoes_vendas when Feegow returns nothing
+      if (origemDado === "feegow_caixa") {
+        const fallbackStats = await buildAgregadoFromVendas(supabase, clinicaId, dateStart, dateEnd);
+        stats.criados = fallbackStats.criados;
+        stats.atualizados = fallbackStats.atualizados;
+        stats.detalhes.source = "fallback_transacoes_vendas";
+      }
       await finishLog(supabase, logId, "sucesso", stats);
       return stats;
     }
@@ -607,7 +622,7 @@ async function syncRecebiveisAgregados(
     interface AggKey {
       data_base: string;
       meio: string;
-      bandeira: string;
+      bandeira: string | null;
       competencia: string;
       valor: number;
       refs: any[];
@@ -617,27 +632,20 @@ async function syncRecebiveisAgregados(
     for (const inv of invoices) {
       stats.processados++;
 
-      // Extract payments from invoice
       const payments = inv.pagamentos || inv.payments || [];
-      const invDate = (inv.data || inv.date || inv.timestamp || "").split(" ")[0];
+      const invDate = parseFeegowDateToIso(inv.data || inv.date || inv.timestamp);
 
       if (Array.isArray(payments) && payments.length > 0) {
         for (const pmt of payments) {
-          const pmtDate = (pmt.data || pmt.date || invDate || "").split(" ")[0];
-          if (!pmtDate) continue;
-
-          // Convert DD-MM-YYYY to ISO if needed
-          let dateIso = pmtDate;
-          if (pmtDate.includes("-") && pmtDate.split("-")[0].length === 2) {
-            const [d, m, y] = pmtDate.split("-");
-            dateIso = `${y}-${m}-${d}`;
-          }
+          const dateIso = parseFeegowDateToIso(pmt.data || pmt.date) || invDate;
+          if (!dateIso) continue;
 
           const fpId = Number(pmt.forma_pagamento || pmt.forma_pagamento_id || pmt.payment_type_id || 0);
           const fpDesc = pmt.forma_pagamento_desc || pmt.payment_type_name || "";
           const meio = mapFormaPagamentoToMeio(fpId, fpDesc);
-          const bandeira = pmt.bandeira_nome || pmt.bandeira || pmt.card_brand || "";
-          const valor = Number(pmt.valor || pmt.amount || pmt.value || 0);
+          const bandeiraId = Number(pmt.bandeira_id || 0);
+          const bandeira = mapBandeira(bandeiraId, pmt.bandeira_nome || pmt.bandeira || pmt.card_brand || "");
+          let valor = parseFeegowValue(pmt.valor || pmt.amount || pmt.value);
           if (valor <= 0) continue;
 
           const competencia = dateIso.substring(0, 7) + "-01";
@@ -651,7 +659,7 @@ async function syncRecebiveisAgregados(
             aggregated.set(key, {
               data_base: dateIso,
               meio,
-              bandeira: bandeira || null as any,
+              bandeira,
               competencia,
               valor,
               refs: [{ invoice_id: inv.invoice_id || inv.id, pmt_id: pmt.id }],
@@ -659,22 +667,18 @@ async function syncRecebiveisAgregados(
           }
         }
       } else {
-        // No payment detail — use invoice-level data
-        let dateIso = invDate;
-        if (invDate && invDate.includes("-") && invDate.split("-")[0].length === 2) {
-          const [d, m, y] = invDate.split("-");
-          dateIso = `${y}-${m}-${d}`;
-        }
-        if (!dateIso) { stats.ignorados++; continue; }
+        if (!invDate) { stats.ignorados++; continue; }
 
-        const valor = Number(inv.amount || inv.valor || inv.total || 0);
+        let valor = parseFeegowValue(inv.amount || inv.valor || inv.total);
         if (valor <= 0) { stats.ignorados++; continue; }
 
         const fpId = Number(inv.forma_pagamento_id || inv.payment_type_id || 0);
         const fpDesc = inv.forma_pagamento_desc || "";
         const meio = mapFormaPagamentoToMeio(fpId, fpDesc);
-        const competencia = dateIso.substring(0, 7) + "-01";
-        const key = `${dateIso}|${meio}|`;
+        const bandeiraId = Number(inv.bandeira_id || 0);
+        const bandeira = mapBandeira(bandeiraId, inv.bandeira_nome || "");
+        const competencia = invDate.substring(0, 7) + "-01";
+        const key = `${invDate}|${meio}|${bandeira || ""}`;
 
         const existing = aggregated.get(key);
         if (existing) {
@@ -682,9 +686,9 @@ async function syncRecebiveisAgregados(
           existing.refs.push({ invoice_id: inv.invoice_id || inv.id });
         } else {
           aggregated.set(key, {
-            data_base: dateIso,
+            data_base: invDate,
             meio,
-            bandeira: null as any,
+            bandeira,
             competencia,
             valor,
             refs: [{ invoice_id: inv.invoice_id || inv.id }],
@@ -694,71 +698,7 @@ async function syncRecebiveisAgregados(
     }
 
     // Upsert into contas_receber_agregado
-    for (const [, agg] of aggregated) {
-      try {
-        // Use the unique index: (clinica_id, competencia, data_base, meio, bandeira, origem_dado)
-        // Try to find existing record first
-        let query = supabase
-          .from("contas_receber_agregado")
-          .select("id, valor_esperado")
-          .eq("clinica_id", clinicaId)
-          .eq("competencia", agg.competencia)
-          .eq("data_base", agg.data_base)
-          .eq("meio", agg.meio)
-          .eq("origem_dado", "feegow_invoice");
-
-        if (agg.bandeira) {
-          query = query.eq("bandeira", agg.bandeira);
-        } else {
-          query = query.is("bandeira", null);
-        }
-
-        const { data: existing } = await query.maybeSingle();
-
-        if (existing) {
-          // Update if value changed
-          if (Math.abs(existing.valor_esperado - agg.valor) > 0.01) {
-            await supabase.from("contas_receber_agregado").update({
-              valor_esperado: agg.valor,
-              referencias_json: { feegow_invoices: agg.refs },
-              updated_at: new Date().toISOString(),
-            }).eq("id", existing.id);
-            stats.atualizados++;
-          } else {
-            stats.ignorados++;
-          }
-        } else {
-          // Determine tipo_recebivel
-          let tipoRecebivel = "getnet";
-          if (agg.meio === "dinheiro") tipoRecebivel = "dinheiro";
-          else if (agg.meio === "pix") tipoRecebivel = "pix_banco";
-          else if (agg.meio === "convenio") tipoRecebivel = "convenio_nf";
-          else if (agg.meio === "boleto") tipoRecebivel = "pix_banco";
-
-          await supabase.from("contas_receber_agregado").insert({
-            clinica_id: clinicaId,
-            tipo_recebivel: tipoRecebivel,
-            competencia: agg.competencia,
-            data_base: agg.data_base,
-            meio: agg.meio,
-            bandeira: agg.bandeira,
-            valor_esperado: agg.valor,
-            valor_recebido: 0,
-            status: "pendente",
-            origem_dado: "feegow_invoice",
-            origem_ref: { source: "feegow_list_invoice" },
-            referencias_json: { feegow_invoices: agg.refs },
-          });
-          stats.criados++;
-        }
-      } catch (e: any) {
-        if (!e.message?.includes("duplicate")) {
-          stats.erros.push(`Agg ${agg.data_base}|${agg.meio}: ${e.message}`);
-        } else {
-          stats.ignorados++;
-        }
-      }
-    }
+    await upsertAgregados(supabase, clinicaId, aggregated, origemDado, stats);
 
     stats.detalhes.aggregated_keys = aggregated.size;
     await finishLog(supabase, logId, stats.erros.length > 0 ? "erro_parcial" : "sucesso", stats);
@@ -767,6 +707,120 @@ async function syncRecebiveisAgregados(
     await finishLog(supabase, logId, "erro", stats);
   }
   return stats;
+}
+
+// ─── Build agregado from transacoes_vendas (fallback) ──────────
+async function buildAgregadoFromVendas(
+  supabase: any, clinicaId: string, dateStart: string, dateEnd: string,
+) {
+  const stats = { criados: 0, atualizados: 0, erros: [] as string[] };
+
+  const { data: vendas } = await supabase
+    .from("transacoes_vendas")
+    .select("data_competencia, forma_pagamento_enum, valor_bruto, status_recebimento")
+    .eq("clinica_id", clinicaId)
+    .gte("data_competencia", dateStart)
+    .lte("data_competencia", dateEnd)
+    .limit(5000);
+
+  if (!vendas || vendas.length === 0) return stats;
+
+  const meioMap: Record<string, string> = {
+    cartao_credito: "cartao_credito", cartao_debito: "cartao_debito",
+    pix: "pix", dinheiro: "dinheiro", convenio_nf: "convenio", boleto: "boleto",
+  };
+
+  interface AggKey { data_base: string; meio: string; bandeira: string | null; competencia: string; valor: number; refs: any[] }
+  const aggregated = new Map<string, AggKey>();
+
+  for (const v of vendas) {
+    const meio = meioMap[v.forma_pagamento_enum || ""] || "dinheiro";
+    const dataBase = v.data_competencia;
+    const key = `${dataBase}|${meio}|`;
+    const competencia = dataBase.substring(0, 7) + "-01";
+
+    const existing = aggregated.get(key);
+    if (existing) {
+      existing.valor += Number(v.valor_bruto) || 0;
+    } else {
+      aggregated.set(key, {
+        data_base: dataBase, meio, bandeira: null,
+        competencia, valor: Number(v.valor_bruto) || 0, refs: [],
+      });
+    }
+  }
+
+  await upsertAgregados(supabase, clinicaId, aggregated, "feegow_caixa", stats);
+  return stats;
+}
+
+// ─── Shared upsert logic for contas_receber_agregado ───────────
+async function upsertAgregados(
+  supabase: any, clinicaId: string,
+  aggregated: Map<string, { data_base: string; meio: string; bandeira: string | null; competencia: string; valor: number; refs: any[] }>,
+  origemDado: string, stats: any,
+) {
+  for (const [, agg] of aggregated) {
+    try {
+      let query = supabase
+        .from("contas_receber_agregado")
+        .select("id, valor_esperado")
+        .eq("clinica_id", clinicaId)
+        .eq("competencia", agg.competencia)
+        .eq("data_base", agg.data_base)
+        .eq("meio", agg.meio)
+        .eq("origem_dado", origemDado);
+
+      if (agg.bandeira) {
+        query = query.eq("bandeira", agg.bandeira);
+      } else {
+        query = query.is("bandeira", null);
+      }
+
+      const { data: existing } = await query.maybeSingle();
+
+      if (existing) {
+        if (Math.abs(existing.valor_esperado - agg.valor) > 0.01) {
+          await supabase.from("contas_receber_agregado").update({
+            valor_esperado: agg.valor,
+            referencias_json: agg.refs.length > 0 ? { feegow_invoices: agg.refs } : undefined,
+            updated_at: new Date().toISOString(),
+          }).eq("id", existing.id);
+          stats.atualizados++;
+        } else {
+          stats.ignorados++;
+        }
+      } else {
+        let tipoRecebivel = "getnet";
+        if (agg.meio === "dinheiro") tipoRecebivel = "dinheiro";
+        else if (agg.meio === "pix") tipoRecebivel = "pix_banco";
+        else if (agg.meio === "convenio") tipoRecebivel = "convenio_nf";
+        else if (agg.meio === "boleto") tipoRecebivel = "pix_banco";
+
+        await supabase.from("contas_receber_agregado").insert({
+          clinica_id: clinicaId,
+          tipo_recebivel: tipoRecebivel,
+          competencia: agg.competencia,
+          data_base: agg.data_base,
+          meio: agg.meio,
+          bandeira: agg.bandeira,
+          valor_esperado: agg.valor,
+          valor_recebido: 0,
+          status: "pendente",
+          origem_dado: origemDado,
+          origem_ref: { source: `feegow_${origemDado}` },
+          referencias_json: agg.refs.length > 0 ? { feegow_invoices: agg.refs } : null,
+        });
+        stats.criados++;
+      }
+    } catch (e: any) {
+      if (!e.message?.includes("duplicate")) {
+        stats.erros.push(`Agg ${agg.data_base}|${agg.meio}: ${e.message}`);
+      } else {
+        stats.ignorados++;
+      }
+    }
+  }
 }
 
 // ─── SYNC MEDICAL TRANSFERS (Repasses Médicos → CP) ───────────
@@ -814,12 +868,7 @@ async function syncMedicalTransfers(
       const profFid = String(t.profissional_id || t.professional_id || t.doctor_id || "");
       const med = profFid ? medMap.get(profFid) : null;
       const dataRef = t.data || t.date || t.timestamp || dateStart;
-      const dataComp = typeof dataRef === "string" ? dataRef.split(" ")[0] : dateStart;
-      let dataCompIso = dataComp;
-      if (dataComp.includes("-") && dataComp.split("-")[0].length === 2) {
-        const [d, m, y] = dataComp.split("-");
-        dataCompIso = `${y}-${m}-${d}`;
-      }
+      const dataCompIso = parseFeegowDateToIso(dataRef) || dateStart;
 
       const fgId = `transfer_${t.id || t.transfer_id || `${profFid}_${dataCompIso}`}`;
 
@@ -928,12 +977,20 @@ Deno.serve(async (req) => {
       response.sales = { ...totalStats, chunks_count: chunks.length };
     }
 
-    // Sync recebiveis agregados from Feegow invoices
+    // Sync recebiveis agregados from Feegow invoices (general)
     if (action === "full" || action === "recebiveis" || action === "invoices") {
       const end = body.date_end || new Date().toISOString().split("T")[0];
       const start = body.date_start || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
-      const recebiveisResult = await syncRecebiveisAgregados(supabase, clinicaId, feegowHeaders, start, end);
+      const recebiveisResult = await syncRecebiveisAgregados(supabase, clinicaId, feegowHeaders, start, end, "feegow_invoice");
       response.recebiveis_agregados = recebiveisResult;
+    }
+
+    // NEW: Sync recebimentos agregados from Feegow Caixa (tipo_conta=7)
+    if (action === "full" || action === "recebimentos_agregados" || action === "caixa") {
+      const end = body.date_end || new Date().toISOString().split("T")[0];
+      const start = body.date_start || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+      const caixaResult = await syncRecebiveisAgregados(supabase, clinicaId, feegowHeaders, start, end, "feegow_caixa");
+      response.recebimentos_caixa = caixaResult;
     }
 
     // Sync medical transfers (repasses médicos → CP)
