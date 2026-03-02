@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-webhook-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -45,6 +45,7 @@ interface TransacaoBancaria {
   descricao: string | null;
   status: string;
   fitid: string;
+  banco?: string;
 }
 
 interface MatchResult {
@@ -60,6 +61,25 @@ interface MatchResult {
   valor_liquido: number;
 }
 
+interface LancamentoPendente {
+  id: string;
+  valor: number;
+  data_competencia: string;
+  data_vencimento: string | null;
+  fornecedor: string | null;
+  descricao: string | null;
+  forma_pagamento: string | null;
+}
+
+interface ExpenseMatchResult {
+  lancamento_id: string;
+  transacao_bancaria_id: string;
+  score: number;
+  rule: string;
+  divergencia: number;
+  status: "conciliado" | "divergente";
+}
+
 // ─── Helpers ────────────────────────────────────────────────────
 function daysDiff(a: string, b: string): number {
   return Math.abs(
@@ -71,57 +91,53 @@ function dateOnly(d: string): string {
   return d.split("T")[0];
 }
 
-/** Check if date falls on Friday(5) or Saturday(6) */
 function isFridayOrSaturday(dateStr: string): boolean {
   const day = new Date(dateStr).getDay();
   return day === 5 || day === 6;
 }
 
-/** Get next business day (skip Sat=6, Sun=0) */
 function nextBusinessDay(dateStr: string): string {
   const d = new Date(dateStr);
-  do {
-    d.setDate(d.getDate() + 1);
-  } while (d.getDay() === 0 || d.getDay() === 6);
+  do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
   return d.toISOString().split("T")[0];
 }
 
-/** Check if bankDate is an expected settlement date for the given sale/getnet date,
- *  considering that Friday/Saturday sales settle on next Monday */
-function isValidSettlementDate(
-  saleDate: string,
-  bankDate: string,
-  previstoDate: string | null,
-  toleranceDays: number = 2
-): boolean {
+function isValidSettlementDate(saleDate: string, bankDate: string, previstoDate: string | null, toleranceDays = 2): boolean {
   const saleDateOnly = dateOnly(saleDate);
   const bankDateOnly = dateOnly(bankDate);
-
-  // If Getnet provides expected payment date, use it with tolerance
   if (previstoDate) {
-    const diff = daysDiff(previstoDate, bankDateOnly);
-    // Allow tolerance + extra for weekend shifts
-    if (diff <= toleranceDays + 2) return true;
+    if (daysDiff(previstoDate, bankDateOnly) <= toleranceDays + 2) return true;
   }
-
-  // Business day rule: Fri/Sat → next Monday
   if (isFridayOrSaturday(saleDateOnly)) {
     const expectedDate = nextBusinessDay(saleDateOnly);
-    // For debit: D+1 but adjusted for weekends
     if (daysDiff(expectedDate, bankDateOnly) <= toleranceDays) return true;
   }
-
-  // Standard: D+0 to D+toleranceDays
   if (daysDiff(saleDateOnly, bankDateOnly) <= toleranceDays) return true;
-
   return false;
 }
 
+/** Normalize text for fuzzy matching: lowercase, no accents, no punctuation */
+function normalizeText(s: string | null | undefined): string {
+  if (!s) return "";
+  return s.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Simple text similarity (0-1) using shared words */
+function textSimilarity(a: string, b: string): number {
+  const wa = new Set(normalizeText(a).split(" ").filter(w => w.length > 2));
+  const wb = new Set(normalizeText(b).split(" ").filter(w => w.length > 2));
+  if (wa.size === 0 || wb.size === 0) return 0;
+  let shared = 0;
+  for (const w of wa) { if (wb.has(w)) shared++; }
+  return shared / Math.max(wa.size, wb.size);
+}
+
 // ─── Step 1: Feegow Venda ↔ Getnet ─────────────────────────────
-function matchVendasGetnet(
-  vendas: Venda[],
-  getnetTxs: GetnetTx[]
-): MatchResult[] {
+function matchVendasGetnet(vendas: Venda[], getnetTxs: GetnetTx[]): MatchResult[] {
   const results: MatchResult[] = [];
   const usedGetnet = new Set<string>();
 
@@ -132,34 +148,26 @@ function matchVendasGetnet(
       if (usedGetnet.has(gt.id)) continue;
       if (gt.venda_id && gt.venda_id !== venda.id) continue;
 
-      // Match by valor_bruto (exact or very close)
       const div = Math.abs(venda.valor_bruto - gt.valor_bruto);
       const pctDiff = venda.valor_bruto > 0 ? (div / venda.valor_bruto) * 100 : 100;
-      if (pctDiff > 1 && div > 0.5) continue; // Very tight: 1% or R$0.50
+      if (pctDiff > 1 && div > 0.5) continue;
 
-      // Match by date (same day or D+1)
       const dias = daysDiff(venda.data_competencia, dateOnly(gt.data_venda));
-      if (dias > 1) continue; // Venda and Getnet should be same day
+      if (dias > 1) continue;
 
-      // Match payment method
       let methodBonus = 0;
       if (venda.forma_pagamento_enum && gt.modalidade) {
-        const feegowMethod = venda.forma_pagamento_enum.toLowerCase();
-        const getnetMethod = gt.modalidade.toLowerCase();
-        if (
-          (feegowMethod.includes("credito") && getnetMethod.includes("cr")) ||
-          (feegowMethod.includes("debito") && getnetMethod.includes("d")) ||
-          (feegowMethod.includes("pix") && gt.tipo_extrato === "pix")
-        ) {
+        const fm = venda.forma_pagamento_enum.toLowerCase();
+        const gm = gt.modalidade.toLowerCase();
+        if ((fm.includes("credito") && gm.includes("cr")) ||
+            (fm.includes("debito") && gm.includes("d")) ||
+            (fm.includes("pix") && gt.tipo_extrato === "pix")) {
           methodBonus = 15;
         }
       }
 
-      // Match parcelas
       let parcelaBonus = 0;
-      if (venda.parcelas && gt.parcelas && venda.parcelas === gt.parcelas) {
-        parcelaBonus = 5;
-      }
+      if (venda.parcelas && gt.parcelas && venda.parcelas === gt.parcelas) parcelaBonus = 5;
 
       let score = 100 - pctDiff * 10 - dias * 5 + methodBonus + parcelaBonus;
       if (div === 0) score += 20;
@@ -173,15 +181,11 @@ function matchVendasGetnet(
     if (bestMatch) {
       usedGetnet.add(bestMatch.gt.id);
       results.push({
-        venda_id: venda.id,
-        getnet_id: bestMatch.gt.id,
-        transacao_bancaria_id: null,
+        venda_id: venda.id, getnet_id: bestMatch.gt.id, transacao_bancaria_id: null,
         score: bestMatch.score,
         metodo: bestMatch.div === 0 ? "exato_feegow_getnet" : "aproximado_feegow_getnet",
-        divergencia: bestMatch.div,
-        tipo: "venda_getnet",
-        valor_bruto: bestMatch.gt.valor_bruto,
-        valor_taxa: bestMatch.gt.valor_taxa,
+        divergencia: bestMatch.div, tipo: "venda_getnet",
+        valor_bruto: bestMatch.gt.valor_bruto, valor_taxa: bestMatch.gt.valor_taxa,
         valor_liquido: bestMatch.gt.valor_liquido,
       });
     }
@@ -189,52 +193,33 @@ function matchVendasGetnet(
   return results;
 }
 
-// ─── Step 2: Getnet ↔ Banco (by valor_liquido + data prevista) ──
-function matchGetnetBanco(
-  getnetTxs: GetnetTx[],
-  creditos: TransacaoBancaria[]
-): MatchResult[] {
+// ─── Step 2: Getnet ↔ Banco ────────────────────────────────────
+function matchGetnetBanco(getnetTxs: GetnetTx[], creditos: TransacaoBancaria[]): MatchResult[] {
   const results: MatchResult[] = [];
   const usedBanco = new Set<string>();
 
-  // Group getnet by data_prevista_pagamento for batch matching
   for (const gt of getnetTxs) {
     if (gt.transacao_bancaria_id) continue;
     let bestMatch: { tb: TransacaoBancaria; score: number; div: number } | null = null;
 
     for (const tb of creditos) {
       if (usedBanco.has(tb.id)) continue;
-
-      // Match by valor_liquido (what actually arrives in the bank)
       const div = Math.abs(gt.valor_liquido - tb.valor);
       const pctDiff = gt.valor_liquido > 0 ? (div / gt.valor_liquido) * 100 : 100;
       if (pctDiff > 1 && div > 0.5) continue;
 
-      // Use business day settlement rules
-      const validDate = isValidSettlementDate(
-        dateOnly(gt.data_venda),
-        tb.data_transacao,
-        gt.data_prevista_pagamento,
-        2
-      );
+      const validDate = isValidSettlementDate(dateOnly(gt.data_venda), tb.data_transacao, gt.data_prevista_pagamento, 2);
       if (!validDate) {
-        // Also check if bank date is near data_prevista_pagamento with wider window
         if (gt.data_prevista_pagamento) {
-          const diff = daysDiff(gt.data_prevista_pagamento, tb.data_transacao);
-          if (diff > 3) continue;
+          if (daysDiff(gt.data_prevista_pagamento, tb.data_transacao) > 3) continue;
         } else {
-          // No previsto date, use wider window for debit cards (D+1)
-          const dayDiff = daysDiff(dateOnly(gt.data_venda), tb.data_transacao);
-          if (dayDiff > 5) continue;
+          if (daysDiff(dateOnly(gt.data_venda), tb.data_transacao) > 5) continue;
         }
       }
 
       let score = 100 - pctDiff * 10;
       if (div === 0) score += 20;
-      // Bonus for matching on previsto date
-      if (gt.data_prevista_pagamento && gt.data_prevista_pagamento === tb.data_transacao) {
-        score += 15;
-      }
+      if (gt.data_prevista_pagamento && gt.data_prevista_pagamento === tb.data_transacao) score += 15;
       score = Math.max(0, Math.min(100, score));
 
       if (score > 50 && (!bestMatch || score > bestMatch.score)) {
@@ -245,27 +230,20 @@ function matchGetnetBanco(
     if (bestMatch) {
       usedBanco.add(bestMatch.tb.id);
       results.push({
-        venda_id: null,
-        getnet_id: gt.id,
-        transacao_bancaria_id: bestMatch.tb.id,
+        venda_id: null, getnet_id: gt.id, transacao_bancaria_id: bestMatch.tb.id,
         score: bestMatch.score,
         metodo: bestMatch.div === 0 ? "exato_getnet_banco" : "aproximado_getnet_banco",
-        divergencia: bestMatch.div,
-        tipo: "getnet_banco",
-        valor_bruto: gt.valor_bruto,
-        valor_taxa: gt.valor_taxa,
-        valor_liquido: gt.valor_liquido,
+        divergencia: bestMatch.div, tipo: "getnet_banco",
+        valor_bruto: gt.valor_bruto, valor_taxa: gt.valor_taxa, valor_liquido: gt.valor_liquido,
       });
     }
   }
   return results;
 }
 
-// ─── Step 3: Débitos automáticos (same as before) ───────────────
+// ─── Step 3: Débitos automáticos ────────────────────────────────
 async function processDebitosAutomaticos(
-  supabase: any,
-  clinicaId: string,
-  debitos: TransacaoBancaria[]
+  supabase: any, clinicaId: string, debitos: TransacaoBancaria[]
 ): Promise<{ processados: number; baixados: number; erros: string[] }> {
   const stats = { processados: 0, baixados: 0, erros: [] as string[] };
 
@@ -289,15 +267,11 @@ async function processDebitosAutomaticos(
 
         if (regra.tipo_destino === "divida" && regra.destino_id) {
           const { data: parcela } = await supabase
-            .from("divida_parcelas_previstas")
-            .select("*")
-            .eq("divida_id", regra.destino_id)
-            .eq("clinica_id", clinicaId)
+            .from("divida_parcelas_previstas").select("*")
+            .eq("divida_id", regra.destino_id).eq("clinica_id", clinicaId)
             .eq("pago", false)
-            .gte("competencia", new Date(debito.data_transacao).toISOString().split("T")[0])
-            .order("competencia", { ascending: true })
-            .limit(1)
-            .maybeSingle();
+            .gte("competencia", dateOnly(debito.data_transacao))
+            .order("competencia", { ascending: true }).limit(1).maybeSingle();
 
           if (parcela) {
             const diff = Math.abs(parcela.pmt - debito.valor);
@@ -329,14 +303,10 @@ async function processDebitosAutomaticos(
           }
         } else if (regra.tipo_destino === "imposto" && regra.imposto) {
           const { data: imposto } = await supabase
-            .from("impostos_devidos")
-            .select("*")
-            .eq("clinica_id", clinicaId)
-            .eq("imposto", regra.imposto)
-            .eq("status", "aberto")
-            .order("competencia", { ascending: true })
-            .limit(1)
-            .maybeSingle();
+            .from("impostos_devidos").select("*")
+            .eq("clinica_id", clinicaId).eq("imposto", regra.imposto)
+            .eq("status", "aberto").order("competencia", { ascending: true })
+            .limit(1).maybeSingle();
 
           if (imposto) {
             const diff = Math.abs(imposto.valor_devido - debito.valor);
@@ -365,7 +335,7 @@ async function processDebitosAutomaticos(
           await supabase.from("contas_pagar_lancamentos").insert({
             clinica_id: clinicaId, data_competencia: debito.data_transacao,
             data_pagamento: debito.data_transacao, valor: debito.valor,
-            descricao: debito.descricao, status: "pago", tipo_despesa: "fixo",
+            descricao: debito.descricao, status: "pago", tipo_despesa: "variavel",
             forma_pagamento: "debito_automatico", ofx_transaction_id: debito.fitid,
             plano_contas_id: regra.destino_id,
           });
@@ -382,6 +352,218 @@ async function processDebitosAutomaticos(
       }
     }
   }
+  return stats;
+}
+
+// ─── Step 4: Reconcile Expenses (AP ↔ Extrato Débitos) ──────────
+async function reconcileExpenses(
+  supabase: any,
+  clinicaId: string,
+  debitos: TransacaoBancaria[],
+  toleranciaValor = 0.50,
+  toleranciaDias = 3
+): Promise<{ conciliados: number; divergentes: number; pendentes: number; erros: string[] }> {
+  const stats = { conciliados: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
+
+  // Load pending AP lancamentos
+  const { data: lancamentos } = await supabase
+    .from("contas_pagar_lancamentos")
+    .select("id, valor, data_competencia, data_vencimento, fornecedor, descricao, forma_pagamento")
+    .eq("clinica_id", clinicaId)
+    .eq("status", "pendente_conciliacao")
+    .is("data_pagamento", null);
+
+  if (!lancamentos || lancamentos.length === 0) return stats;
+
+  // Get already reconciled transaction IDs to avoid duplicates
+  const { data: jaConc } = await supabase
+    .from("conciliacao_despesas")
+    .select("transacao_bancaria_id")
+    .eq("clinica_id", clinicaId)
+    .eq("status", "conciliado")
+    .not("transacao_bancaria_id", "is", null);
+
+  const usedTxIds = new Set((jaConc || []).map((r: any) => r.transacao_bancaria_id));
+
+  // Also get already reconciled lancamento IDs
+  const { data: jaLanc } = await supabase
+    .from("conciliacao_despesas")
+    .select("lancamento_id")
+    .eq("clinica_id", clinicaId)
+    .eq("status", "conciliado");
+
+  const usedLancIds = new Set((jaLanc || []).map((r: any) => r.lancamento_id));
+
+  // Filter available debits (negative/debito, pending, not used for getnet/receitas, not GETNET memo)
+  const availableDebits = debitos.filter(d =>
+    d.status === "pendente" &&
+    !usedTxIds.has(d.id) &&
+    !normalizeText(d.descricao).includes("getnet")
+  );
+
+  const usedDebits = new Set<string>();
+  const matches: ExpenseMatchResult[] = [];
+
+  for (const lanc of lancamentos as LancamentoPendente[]) {
+    if (usedLancIds.has(lanc.id)) continue;
+
+    const candidates: { tb: TransacaoBancaria; score: number; div: number; rule: string }[] = [];
+    const lancVal = lanc.valor;
+    const lancDate = lanc.data_vencimento || lanc.data_competencia;
+    const lancForn = normalizeText(lanc.fornecedor);
+    const lancDesc = normalizeText(lanc.descricao);
+    const lancFp = (lanc.forma_pagamento || "").toLowerCase();
+
+    for (const tb of availableDebits) {
+      if (usedDebits.has(tb.id)) continue;
+
+      const absVal = Math.abs(tb.valor);
+      const valorDiff = Math.abs(lancVal - absVal);
+      if (valorDiff > toleranciaValor && (lancVal > 0 ? valorDiff / lancVal * 100 : 100) > 2) continue;
+
+      const dias = daysDiff(lancDate, dateOnly(tb.data_transacao));
+      if (dias > toleranciaDias) continue;
+
+      // Score calculation
+      let score = 0;
+      let rule = "";
+
+      // Value score (0-60)
+      if (valorDiff === 0) { score += 60; rule += "valor_exato "; }
+      else if (valorDiff <= 0.10) { score += 55; rule += "valor_centavos "; }
+      else if (valorDiff <= toleranciaValor) { score += 45; rule += "valor_tolerancia "; }
+      else { score += 30; rule += "valor_pct "; }
+
+      // Date score (0-25)
+      if (dias === 0) { score += 25; rule += "data_exata "; }
+      else if (dias === 1) { score += 20; rule += "data_d1 "; }
+      else if (dias <= 2) { score += 15; rule += "data_d2 "; }
+      else { score += 8; rule += "data_d3 "; }
+
+      // Text similarity (0-15)
+      const memo = normalizeText(tb.descricao);
+      const simForn = textSimilarity(lancForn, memo);
+      const simDesc = textSimilarity(lancDesc, memo);
+      const textScore = Math.max(simForn, simDesc) * 15;
+      score += textScore;
+      if (textScore > 5) rule += "texto_similar ";
+
+      // Bonus: payment method hints from memo
+      if (memo.includes("pix") && (lancFp === "pix" || lancFp.includes("pix"))) {
+        score += 10; rule += "pix_match ";
+      } else if ((memo.includes("pagamento") && memo.includes("boleto")) && (lancFp === "boleto" || lancFp.includes("boleto"))) {
+        score += 10; rule += "boleto_match ";
+      } else if ((memo.includes("deb") || memo.includes("fatura")) && (lancFp === "debito_automatico" || lancFp.includes("debito"))) {
+        score += 10; rule += "debito_match ";
+      }
+
+      score = Math.max(0, Math.min(100, score));
+      candidates.push({ tb, score, div: valorDiff, rule: rule.trim() });
+    }
+
+    if (candidates.length === 0) {
+      stats.pendentes++;
+      continue;
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    const best = candidates[0];
+
+    // Check for ambiguity
+    const hasAmbiguity = candidates.length > 1 && (candidates[1].score >= best.score - 5);
+
+    if (best.score >= 80 && !hasAmbiguity) {
+      // Auto-reconcile
+      usedDebits.add(best.tb.id);
+      matches.push({
+        lancamento_id: lanc.id,
+        transacao_bancaria_id: best.tb.id,
+        score: best.score,
+        rule: best.rule,
+        divergencia: best.div,
+        status: "conciliado",
+      });
+      stats.conciliados++;
+    } else if (best.score >= 60 || hasAmbiguity) {
+      // Divergent - needs review
+      matches.push({
+        lancamento_id: lanc.id,
+        transacao_bancaria_id: best.tb.id,
+        score: best.score,
+        rule: best.rule + (hasAmbiguity ? " ambiguo" : ""),
+        divergencia: best.div,
+        status: "divergente",
+      });
+      stats.divergentes++;
+    } else {
+      stats.pendentes++;
+    }
+  }
+
+  // Persist matches
+  for (const m of matches) {
+    try {
+      // Update conciliacao_despesas (find existing or create)
+      const { data: existing } = await supabase
+        .from("conciliacao_despesas")
+        .select("id")
+        .eq("lancamento_id", m.lancamento_id)
+        .eq("clinica_id", clinicaId)
+        .in("status", ["pendente", "divergente"])
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from("conciliacao_despesas").update({
+          transacao_bancaria_id: m.transacao_bancaria_id,
+          status: m.status,
+          score: m.score,
+          metodo_match: "auto_reconcile_expenses",
+          rule_applied: m.rule,
+          divergencia: m.divergencia,
+          conciliado_em: m.status === "conciliado" ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.id);
+      } else {
+        await supabase.from("conciliacao_despesas").insert({
+          clinica_id: clinicaId,
+          lancamento_id: m.lancamento_id,
+          transacao_bancaria_id: m.transacao_bancaria_id,
+          status: m.status,
+          score: m.score,
+          metodo_match: "auto_reconcile_expenses",
+          rule_applied: m.rule,
+          divergencia: m.divergencia,
+          conciliado_em: m.status === "conciliado" ? new Date().toISOString() : null,
+        });
+      }
+
+      if (m.status === "conciliado") {
+        // Update lancamento to pago
+        const bankTx = debitos.find(d => d.id === m.transacao_bancaria_id);
+        await supabase.from("contas_pagar_lancamentos").update({
+          status: "pago",
+          data_pagamento: bankTx ? dateOnly(bankTx.data_transacao) : new Date().toISOString().split("T")[0],
+          match_score: m.score,
+          match_rule: m.rule,
+        }).eq("id", m.lancamento_id);
+
+        // Mark bank transaction as used
+        await supabase.from("transacoes_bancarias")
+          .update({ status: "conciliado", categoria_auto: `ap_conciliado:${m.lancamento_id}` })
+          .eq("id", m.transacao_bancaria_id);
+      } else if (m.status === "divergente") {
+        await supabase.from("contas_pagar_lancamentos").update({
+          status: "divergente",
+          match_score: m.score,
+          match_rule: m.rule,
+          needs_review: true,
+        }).eq("id", m.lancamento_id);
+      }
+    } catch (e) {
+      stats.erros.push(`Lanc ${m.lancamento_id}: ${e.message}`);
+    }
+  }
+
   return stats;
 }
 
@@ -409,7 +591,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Log
     const { data: logData } = await supabase
       .from("integracao_logs")
       .insert({
@@ -427,32 +608,24 @@ Deno.serve(async (req) => {
         .from("transacoes_vendas")
         .select("id, valor_bruto, data_competencia, forma_pagamento_enum, parcelas, feegow_id, invoice_id, status_conciliacao, status_recebimento, convenio_id")
         .eq("clinica_id", clinicaId)
-        .gte("data_competencia", dateStart)
-        .lte("data_competencia", dateEnd)
+        .gte("data_competencia", dateStart).lte("data_competencia", dateEnd)
         .in("status_conciliacao", ["pendente"]),
       supabase
         .from("getnet_transacoes")
         .select("id, tipo_extrato, data_venda, valor_bruto, valor_taxa, valor_liquido, modalidade, forma_pagamento, parcelas, data_prevista_pagamento, comprovante_venda, status_conciliacao, venda_id, transacao_bancaria_id")
         .eq("clinica_id", clinicaId)
-        .gte("data_venda", `${dateStart}T00:00:00`)
-        .lte("data_venda", `${dateEnd}T23:59:59`)
+        .gte("data_venda", `${dateStart}T00:00:00`).lte("data_venda", `${dateEnd}T23:59:59`)
         .eq("status_conciliacao", "pendente"),
       supabase
         .from("transacoes_bancarias")
         .select("id, valor, data_transacao, tipo, descricao, status, fitid")
-        .eq("clinica_id", clinicaId)
-        .eq("tipo", "credito")
-        .eq("status", "pendente")
-        .gte("data_transacao", dateStart)
-        .lte("data_transacao", dateEnd),
+        .eq("clinica_id", clinicaId).eq("tipo", "credito").eq("status", "pendente")
+        .gte("data_transacao", dateStart).lte("data_transacao", dateEnd),
       supabase
         .from("transacoes_bancarias")
         .select("id, valor, data_transacao, tipo, descricao, status, fitid, banco")
-        .eq("clinica_id", clinicaId)
-        .eq("tipo", "debito")
-        .eq("status", "pendente")
-        .gte("data_transacao", dateStart)
-        .lte("data_transacao", dateEnd),
+        .eq("clinica_id", clinicaId).eq("tipo", "debito").eq("status", "pendente")
+        .gte("data_transacao", dateStart).lte("data_transacao", dateEnd),
     ]);
 
     const vendas: Venda[] = vendasRes.data || [];
@@ -463,84 +636,64 @@ Deno.serve(async (req) => {
     // ── Step 1: Feegow ↔ Getnet ──────────────────────────────
     const matchesVG = matchVendasGetnet(vendas, getnetTxs);
 
-    // ── Step 2: Getnet ↔ Banco (créditos by valor_liquido) ───
+    // ── Step 2: Getnet ↔ Banco ───────────────────────────────
     const matchesGB = matchGetnetBanco(getnetTxs, creditos);
 
-    // ── Step 3: Merge para conciliação tripla ────────────────
+    // ── Step 3: Triple merge ─────────────────────────────────
     const tripleMatches: MatchResult[] = [];
     for (const vg of matchesVG) {
       const gb = matchesGB.find((m) => m.getnet_id === vg.getnet_id);
       if (gb) {
         tripleMatches.push({
-          venda_id: vg.venda_id,
-          getnet_id: vg.getnet_id,
+          venda_id: vg.venda_id, getnet_id: vg.getnet_id,
           transacao_bancaria_id: gb.transacao_bancaria_id,
           score: Math.min(vg.score, gb.score),
           metodo: "triplo_feegow_getnet_banco",
-          divergencia: vg.divergencia + gb.divergencia,
-          tipo: "triplo",
-          valor_bruto: vg.valor_bruto,
-          valor_taxa: vg.valor_taxa,
-          valor_liquido: vg.valor_liquido,
+          divergencia: vg.divergencia + gb.divergencia, tipo: "triplo",
+          valor_bruto: vg.valor_bruto, valor_taxa: vg.valor_taxa, valor_liquido: vg.valor_liquido,
         });
       }
     }
 
     const allMatches = [...matchesVG, ...matchesGB, ...tripleMatches];
 
-    // ── Persist ──────────────────────────────────────────────
+    // ── Persist receita matches ──────────────────────────────
     let persisted = 0;
     let debitoStats = { processados: 0, baixados: 0, erros: [] as string[] };
+    let expenseStats = { conciliados: 0, divergentes: 0, pendentes: 0, erros: [] as string[] };
 
     if (!dryRun) {
       for (const match of allMatches) {
         const { error } = await supabase.from("conciliacoes").insert({
-          clinica_id: clinicaId,
-          venda_id: match.venda_id,
+          clinica_id: clinicaId, venda_id: match.venda_id,
           transacao_bancaria_id: match.transacao_bancaria_id,
           status: match.divergencia === 0 ? "conciliado" : "divergente",
           divergencia: match.divergencia,
           observacao: `Auto: ${match.metodo} (score: ${match.score}) | Bruto: ${match.valor_bruto} | Taxa: ${match.valor_taxa} | Líquido: ${match.valor_liquido}`,
-          tipo: match.tipo,
-          metodo_match: match.metodo,
-          score: match.score,
+          tipo: match.tipo, metodo_match: match.metodo, score: match.score,
         });
 
         if (!error) {
           persisted++;
-
-          // Update venda
           if (match.venda_id) {
-            await supabase.from("transacoes_vendas")
-              .update({
-                status_conciliacao: match.divergencia === 0 ? "conciliado" : "divergente",
-                status_recebimento: match.transacao_bancaria_id ? "recebido" : "a_receber",
-              })
-              .eq("id", match.venda_id);
+            await supabase.from("transacoes_vendas").update({
+              status_conciliacao: match.divergencia === 0 ? "conciliado" : "divergente",
+              status_recebimento: match.transacao_bancaria_id ? "recebido" : "a_receber",
+            }).eq("id", match.venda_id);
           }
-
-          // Update getnet transação
           if (match.getnet_id) {
             const updates: any = { status_conciliacao: "conciliado" };
             if (match.venda_id) updates.venda_id = match.venda_id;
             if (match.transacao_bancaria_id) updates.transacao_bancaria_id = match.transacao_bancaria_id;
             await supabase.from("getnet_transacoes").update(updates).eq("id", match.getnet_id);
           }
-
-          // Update banco
           if (match.transacao_bancaria_id) {
-            await supabase.from("transacoes_bancarias")
-              .update({ status: "conciliado" })
-              .eq("id", match.transacao_bancaria_id);
+            await supabase.from("transacoes_bancarias").update({ status: "conciliado" }).eq("id", match.transacao_bancaria_id);
           }
-
-          // Create recebimento for triple matches
           if (match.tipo === "triplo" && match.venda_id) {
             await supabase.from("transacoes_recebimentos").insert({
-              clinica_id: clinicaId,
-              venda_id: match.venda_id,
-              valor: match.valor_liquido,
-              data_recebimento: dateStart, // Will be refined
+              clinica_id: clinicaId, venda_id: match.venda_id,
+              valor: match.valor_liquido, data_recebimento: dateStart,
               origem: "getnet",
               observacao: `Conciliação tripla - Bruto: ${match.valor_bruto}, Taxa: ${match.valor_taxa}`,
             });
@@ -548,8 +701,11 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Step 4: Débitos automáticos
+      // Step 4: Débitos automáticos (regras)
       debitoStats = await processDebitosAutomaticos(supabase, clinicaId, debitos);
+
+      // Step 5: Reconcile Expenses (AP ↔ Extrato)
+      expenseStats = await reconcileExpenses(supabase, clinicaId, debitos);
     }
 
     // ── Summary ──────────────────────────────────────────────
@@ -569,6 +725,12 @@ Deno.serve(async (req) => {
         persisted,
       },
       debitos_automaticos: debitoStats,
+      despesas: {
+        conciliadas: expenseStats.conciliados,
+        divergentes: expenseStats.divergentes,
+        pendentes: expenseStats.pendentes,
+        erros: expenseStats.erros.length,
+      },
       pendencias: {
         vendas_sem_match: vendas.length - matchesVG.length,
         getnet_sem_match: getnetTxs.length -
@@ -585,14 +747,12 @@ Deno.serve(async (req) => {
     };
 
     if (logId) {
-      await supabase.from("integracao_logs")
-        .update({
-          status: "sucesso", fim: new Date().toISOString(),
-          registros_processados: allMatches.length + debitoStats.processados,
-          registros_criados: persisted + debitoStats.baixados,
-          detalhes: summary,
-        })
-        .eq("id", logId);
+      await supabase.from("integracao_logs").update({
+        status: "sucesso", fim: new Date().toISOString(),
+        registros_processados: allMatches.length + debitoStats.processados + (expenseStats.conciliados + expenseStats.divergentes),
+        registros_criados: persisted + debitoStats.baixados + expenseStats.conciliados,
+        detalhes: summary,
+      }).eq("id", logId);
     }
 
     return new Response(JSON.stringify({ success: true, ...summary }), {
@@ -601,8 +761,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     console.error("run-reconciliation error:", e);
     return new Response(JSON.stringify({ error: e.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
