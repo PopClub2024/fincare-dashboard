@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import DashboardFilters, { DashboardFilterValues } from "@/components/dashboard/DashboardFilters";
+import { startOfMonth, endOfMonth, format } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,8 +54,16 @@ interface Lancamento {
   plano_contas?: { codigo_estruturado: string; descricao: string; categoria: string } | null;
 }
 
+const apDefaultFilters: DashboardFilterValues = {
+  dateFrom: startOfMonth(new Date(2026, 0, 1)),
+  dateTo: endOfMonth(new Date()),
+  basCalculo: "competencia",
+};
+
 // ======================= MAIN PAGE =======================
 export default function ContasAPagar() {
+  const [filters, setFilters] = useState<DashboardFilterValues>(apDefaultFilters);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -64,6 +74,8 @@ export default function ContasAPagar() {
           </p>
         </div>
 
+        <DashboardFilters filters={filters} onFilterChange={setFilters} />
+
         <Tabs defaultValue="lancamentos" className="space-y-4">
           <TabsList className="grid w-full grid-cols-3 bg-muted">
             <TabsTrigger value="lancamentos">Lançamentos</TabsTrigger>
@@ -71,7 +83,7 @@ export default function ContasAPagar() {
             <TabsTrigger value="conciliacao">Conciliação</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="lancamentos"><TabLancamentos /></TabsContent>
+          <TabsContent value="lancamentos"><TabLancamentos dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
           <TabsContent value="plano"><TabPlanoContas /></TabsContent>
           <TabsContent value="conciliacao"><TabConciliacao /></TabsContent>
         </Tabs>
@@ -81,7 +93,7 @@ export default function ContasAPagar() {
 }
 
 // ======================= TAB: LANÇAMENTOS =======================
-function TabLancamentos() {
+function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
   const { clinicaId } = useAuth();
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [planoContas, setPlanoContas] = useState<PlanoContas[]>([]);
@@ -101,7 +113,7 @@ function TabLancamentos() {
     if (!clinicaId) return;
     fetchLancamentos();
     fetchPlano();
-  }, [clinicaId]);
+  }, [clinicaId, dateFrom, dateTo]);
 
   const fetchLancamentos = async () => {
     setLoading(true);
@@ -109,8 +121,10 @@ function TabLancamentos() {
       .from("contas_pagar_lancamentos")
       .select("*, plano_contas(codigo_estruturado, descricao, categoria)")
       .eq("clinica_id", clinicaId!)
+      .gte("data_competencia", format(dateFrom, "yyyy-MM-dd"))
+      .lte("data_competencia", format(dateTo, "yyyy-MM-dd"))
       .order("data_competencia", { ascending: false })
-      .limit(200);
+      .limit(500);
     setLancamentos((data as any[]) || []);
     setLoading(false);
   };
