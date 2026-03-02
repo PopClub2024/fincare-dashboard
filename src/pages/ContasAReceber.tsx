@@ -83,6 +83,15 @@ export default function ContasAReceber() {
     </DashboardLayout>
   );
 }
+function mapFormaPgtoToMeio(fp: string | null): string {
+  if (!fp) return "dinheiro";
+  if (fp === "cartao_credito") return "cartao_credito";
+  if (fp === "cartao_debito") return "cartao_debito";
+  if (fp === "pix") return "pix";
+  if (fp === "convenio_nf") return "convenio";
+  if (fp === "dinheiro") return "dinheiro";
+  return "dinheiro";
+}
 
 // ======================= TAB: AGREGADO =======================
 function TabAgregado({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
@@ -99,7 +108,9 @@ function TabAgregado({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data } = await supabase
+
+    // First try canonical table
+    const { data: aggData } = await supabase
       .from("contas_receber_agregado")
       .select("*")
       .eq("clinica_id", clinicaId!)
@@ -107,7 +118,61 @@ function TabAgregado({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
       .lte("competencia", format(dateTo, "yyyy-MM-dd"))
       .order("data_base", { ascending: false })
       .limit(500);
-    setItems((data as any[]) || []);
+
+    if (aggData && aggData.length > 0) {
+      setItems(aggData as any[]);
+      setLoading(false);
+      return;
+    }
+
+    // Fallback: aggregate from transacoes_vendas
+    const { data: vendas } = await supabase
+      .from("transacoes_vendas")
+      .select("data_competencia, forma_pagamento_enum, valor_bruto, status_recebimento")
+      .eq("clinica_id", clinicaId!)
+      .gte("data_competencia", format(dateFrom, "yyyy-MM-dd"))
+      .lte("data_competencia", format(dateTo, "yyyy-MM-dd"))
+      .limit(5000);
+
+    if (vendas && vendas.length > 0) {
+      const grouped: Record<string, CrAgregado> = {};
+      for (const v of vendas) {
+        const meio = mapFormaPgtoToMeio(v.forma_pagamento_enum);
+        const key = `${v.data_competencia}|${meio}`;
+        if (!grouped[key]) {
+          const comp = v.data_competencia.substring(0, 7) + "-01"; // first day of month
+          grouped[key] = {
+            id: key,
+            tipo_recebivel: meio === "convenio" ? "convenio_nf" : meio === "dinheiro" ? "dinheiro" : "getnet",
+            competencia: comp,
+            data_base: v.data_competencia,
+            data_prevista_recebimento: null,
+            data_recebimento: null,
+            meio,
+            bandeira: null,
+            valor_esperado: 0,
+            valor_recebido: 0,
+            status: "pendente",
+            origem_ref: null,
+            nf_id: null,
+          };
+        }
+        grouped[key].valor_esperado += Number(v.valor_bruto) || 0;
+        if (v.status_recebimento === "recebido") {
+          grouped[key].valor_recebido += Number(v.valor_bruto) || 0;
+        }
+      }
+      // Derive status
+      const result = Object.values(grouped).map(r => {
+        if (r.valor_recebido >= r.valor_esperado && r.valor_esperado > 0) r.status = "recebido";
+        else if (r.valor_recebido > 0) r.status = "parcial";
+        return r;
+      });
+      result.sort((a, b) => (b.data_base || "").localeCompare(a.data_base || ""));
+      setItems(result);
+    } else {
+      setItems([]);
+    }
     setLoading(false);
   };
 
