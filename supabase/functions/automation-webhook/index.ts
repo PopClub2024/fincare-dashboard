@@ -404,22 +404,207 @@ async function importRepassesMedicos(supabase: any, body: any) {
   return jsonResponse({ success: criados > 0, import_run_id: run?.id, criados, rejeitados, erros });
 }
 
-// ─── Action: sync_feegow ────────────────────────────────────────
+// ─── Helper: generate date chunks (2-day windows) ──────────────
+function generateDateChunks(dateStart: string, dateEnd: string, chunkDays = 2): { start: string; end: string }[] {
+  const chunks: { start: string; end: string }[] = [];
+  let cur = new Date(dateStart + "T00:00:00Z");
+  const end = new Date(dateEnd + "T00:00:00Z");
+  while (cur <= end) {
+    const chunkEnd = new Date(cur);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + chunkDays - 1);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    chunks.push({
+      start: cur.toISOString().slice(0, 10),
+      end: chunkEnd.toISOString().slice(0, 10),
+    });
+    cur.setUTCDate(cur.getUTCDate() + chunkDays);
+  }
+  return chunks;
+}
+
+// ─── Action: sync_feegow (async with job tracking) ──────────────
 async function syncFeegow(supabase: any, supabaseUrl: string, serviceKey: string, body: any) {
   const { clinica_id, unidade_id, date_start, date_end } = body;
   if (!clinica_id || !date_start || !date_end) {
     return jsonResponse({ error: "clinica_id, date_start, date_end obrigatórios" }, 400);
   }
 
-  const result = await callEdgeFunction(supabaseUrl, serviceKey, "sync-feegow", {
-    clinica_id,
-    unidade_id: unidade_id || null,
-    action: "full",
-    date_start,
-    date_end,
+  const params = { date_start, date_end, unidade_id: unidade_id || null };
+
+  // Idempotency + lock: check for active job with same params
+  const { data: existingJob } = await supabase
+    .from("integracao_jobs")
+    .select("id, status, progress")
+    .eq("clinica_id", clinica_id)
+    .eq("job_type", "sync_feegow")
+    .in("status", ["queued", "running"])
+    .eq("params->>date_start", date_start)
+    .eq("params->>date_end", date_end)
+    .maybeSingle();
+
+  if (existingJob) {
+    return new Response(JSON.stringify({
+      success: true,
+      message: "Job já em andamento",
+      job_id: existingJob.id,
+      status: existingJob.status,
+      progress: existingJob.progress,
+    }), {
+      status: 202,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Create job record
+  const { data: job, error: jobErr } = await supabase
+    .from("integracao_jobs")
+    .insert({ clinica_id, job_type: "sync_feegow", params, status: "queued" })
+    .select("id")
+    .single();
+
+  if (jobErr) {
+    // Unique constraint violation = concurrent duplicate
+    if (jobErr.code === "23505") {
+      return new Response(JSON.stringify({
+        success: true,
+        message: "Job duplicado detectado, já em andamento",
+      }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    return jsonResponse({ error: `Erro criando job: ${jobErr.message}` }, 500);
+  }
+
+  const jobId = job.id;
+
+  // Return 202 immediately, then run sync in background
+  const responsePromise = new Response(JSON.stringify({
+    success: true,
+    job_id: jobId,
+    status: "queued",
+    message: "Sync agendado. Use action job_status para acompanhar.",
+  }), {
+    status: 202,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-  return jsonResponse({ success: result.ok, ...result.data });
+  // Fire-and-forget background execution using EdgeRuntime.waitUntil
+  const bgWork = (async () => {
+    try {
+      await supabase.from("integracao_jobs")
+        .update({ status: "running", started_at: new Date().toISOString() })
+        .eq("id", jobId);
+
+      const chunks = generateDateChunks(date_start, date_end, 2);
+      let completedChunks = 0;
+      let totalProcessados = 0;
+      let totalErros = 0;
+      const chunkResults: any[] = [];
+
+      for (const chunk of chunks) {
+        const chunkStart = Date.now();
+        const result = await callEdgeFunction(supabaseUrl, serviceKey, "sync-feegow", {
+          clinica_id,
+          unidade_id: unidade_id || null,
+          action: "full",
+          date_start: chunk.start,
+          date_end: chunk.end,
+        });
+
+        completedChunks++;
+        const processados = result.data?.sales?.processados || 0;
+        const erros = result.data?.sales?.erros || 0;
+        totalProcessados += processados;
+        totalErros += erros;
+
+        chunkResults.push({
+          chunk: `${chunk.start} → ${chunk.end}`,
+          ok: result.ok,
+          processados,
+          erros,
+          duration_ms: Date.now() - chunkStart,
+        });
+
+        // Update progress
+        await supabase.from("integracao_jobs")
+          .update({
+            progress: {
+              chunks_total: chunks.length,
+              chunks_completed: completedChunks,
+              pct: Math.round((completedChunks / chunks.length) * 100),
+              current_chunk: `${chunk.start} → ${chunk.end}`,
+              total_processados: totalProcessados,
+              total_erros: totalErros,
+            },
+          })
+          .eq("id", jobId);
+
+        // Log each chunk
+        await logIntegracao(supabase, {
+          clinica_id,
+          action: "sync_feegow_chunk",
+          status: result.ok ? "sucesso" : "erro",
+          headers_present: [],
+          detalhes: { job_id: jobId, chunk: chunk, result_summary: { processados, erros } },
+        });
+      }
+
+      // Finalize
+      const finalStatus = totalErros > 0 ? (totalProcessados > 0 ? "completed_partial" : "failed") : "completed";
+      await supabase.from("integracao_jobs")
+        .update({
+          status: finalStatus,
+          finished_at: new Date().toISOString(),
+          progress: {
+            chunks_total: chunks.length,
+            chunks_completed: completedChunks,
+            pct: 100,
+            total_processados: totalProcessados,
+            total_erros: totalErros,
+            chunk_results: chunkResults,
+          },
+        })
+        .eq("id", jobId);
+
+    } catch (e: any) {
+      console.error("sync_feegow job error:", e);
+      await supabase.from("integracao_jobs")
+        .update({
+          status: "failed",
+          error: e.message?.substring(0, 500),
+          finished_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+    }
+  })();
+
+  // Use waitUntil if available (Deno Deploy), otherwise just fire-and-forget
+  if (typeof (globalThis as any).EdgeRuntime?.waitUntil === "function") {
+    (globalThis as any).EdgeRuntime.waitUntil(bgWork);
+  } else {
+    // In Supabase edge runtime, we rely on the promise executing before shutdown
+    bgWork.catch((e) => console.error("Background sync error:", e));
+  }
+
+  return responsePromise;
+}
+
+// ─── Action: job_status ─────────────────────────────────────────
+async function jobStatus(supabase: any, body: any) {
+  const { job_id, clinica_id } = body;
+  if (!job_id) return jsonResponse({ error: "job_id obrigatório" }, 400);
+
+  const query = supabase
+    .from("integracao_jobs")
+    .select("id, clinica_id, job_type, params, status, progress, started_at, finished_at, error, created_at")
+    .eq("id", job_id);
+
+  if (clinica_id) query.eq("clinica_id", clinica_id);
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+  if (!data) return jsonResponse({ error: "Job não encontrado" }, 404);
+
+  return jsonResponse(data);
 }
 
 // ─── Action: autopilot_run ──────────────────────────────────────
@@ -515,6 +700,7 @@ Deno.serve(async (req) => {
           "autopilot_run",
           "recalculate_kpis",
           "process_comprovante",
+          "job_status",
         ],
       }, 400);
     }
@@ -549,12 +735,15 @@ Deno.serve(async (req) => {
       case "process_comprovante":
         response = await processComprovante(supabase, supabaseUrl, serviceKey, body);
         break;
+      case "job_status":
+        response = await jobStatus(supabase, body);
+        break;
       default:
         response = jsonResponse({ error: `Action '${action}' desconhecida` }, 400);
     }
 
     // Log to integracao_logs
-    const responseStatus = response.status === 200 ? "sucesso" : "erro";
+    const responseStatus = response.status >= 200 && response.status < 300 ? "sucesso" : "erro";
     if (clinica_id) {
       await logIntegracao(supabase, {
         clinica_id,
