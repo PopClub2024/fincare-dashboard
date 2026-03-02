@@ -7,11 +7,20 @@ const corsHeaders = {
 };
 
 // ─── Auth ───────────────────────────────────────────────────────
-function verifyWebhookAuth(req: Request): boolean {
-  const secret = Deno.env.get("MAKE_WEBHOOK_SECRET");
+function verifyAutomationToken(req: Request): boolean {
+  const secret = Deno.env.get("AUTOMATION_TOKEN");
   if (!secret) return false;
-  const provided = req.headers.get("x-webhook-secret") || "";
-  return provided === secret;
+
+  // Primary: x-webhook-secret header
+  const webhookSecret = req.headers.get("x-webhook-secret") || "";
+  if (webhookSecret && webhookSecret === secret) return true;
+
+  // Fallback: Authorization: Bearer <AUTOMATION_TOKEN>
+  const authHeader = req.headers.get("authorization") || "";
+  const bearer = authHeader.replace("Bearer ", "");
+  if (bearer && bearer === secret) return true;
+
+  return false;
 }
 
 // ─── SHA-256 hash for idempotency ───────────────────────────────
@@ -46,6 +55,40 @@ async function callEdgeFunction(supabaseUrl: string, serviceKey: string, functio
   return { ok: res.ok, status: res.status, data };
 }
 
+// ─── Logging ────────────────────────────────────────────────────
+async function logIntegracao(supabase: any, params: {
+  clinica_id: string;
+  action: string;
+  status: string;
+  headers_present: string[];
+  detalhes?: any;
+  erros?: any;
+}) {
+  try {
+    await supabase.from("integracao_logs").insert({
+      clinica_id: params.clinica_id,
+      integracao: "automation-webhook",
+      endpoint: "automation-webhook",
+      acao: params.action,
+      status: params.status,
+      detalhes: { headers_present: params.headers_present, ...(params.detalhes || {}) },
+      erros: params.erros || null,
+      inicio: new Date().toISOString(),
+      fim: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error("Failed to log integracao:", e);
+  }
+}
+
+function getHeadersPresent(req: Request): string[] {
+  const present: string[] = [];
+  if (req.headers.get("x-webhook-secret")) present.push("x-webhook-secret");
+  if (req.headers.get("authorization")) present.push("authorization");
+  if (req.headers.get("content-type")) present.push("content-type");
+  return present;
+}
+
 // ─── Action: feegow_run_month ───────────────────────────────────
 async function feegowRunMonth(supabase: any, supabaseUrl: string, serviceKey: string, body: any) {
   const { clinica_id, year, month } = body;
@@ -57,7 +100,6 @@ async function feegowRunMonth(supabase: any, supabaseUrl: string, serviceKey: st
   const lastDay = new Date(year, month, 0).getDate();
   const dateEnd = `${year}-${String(month).padStart(2, "0")}-${lastDay}`;
 
-  // Upsert run record (idempotent by clinica_id + year + month)
   const { data: existingRun } = await supabase
     .from("feegow_sync_runs")
     .select("id, status")
@@ -68,7 +110,6 @@ async function feegowRunMonth(supabase: any, supabaseUrl: string, serviceKey: st
 
   let runId: string;
   if (existingRun) {
-    // Re-run: reset status
     await supabase.from("feegow_sync_runs")
       .update({ status: "em_andamento", healthcheck_ok: null, sync_invoices_ok: null, validate_sales_ok: null, totals: {}, errors: [], finished_at: null })
       .eq("id", existingRun.id);
@@ -84,7 +125,6 @@ async function feegowRunMonth(supabase: any, supabaseUrl: string, serviceKey: st
   const errors: string[] = [];
   const totals: any = {};
 
-  // Step 1: Healthcheck
   const hc = await callEdgeFunction(supabaseUrl, serviceKey, "feegow-healthcheck", { clinica_id });
   const healthOk = hc.ok && hc.data?.ok;
   totals.healthcheck = hc.data;
@@ -96,7 +136,6 @@ async function feegowRunMonth(supabase: any, supabaseUrl: string, serviceKey: st
     return jsonResponse({ success: false, run_id: runId, step: "healthcheck", errors });
   }
 
-  // Step 2: Sync sales (using existing sync-feegow with full action)
   const sync = await callEdgeFunction(supabaseUrl, serviceKey, "sync-feegow", {
     clinica_id, action: "full", date_start: dateStart, date_end: dateEnd,
   });
@@ -106,7 +145,6 @@ async function feegowRunMonth(supabase: any, supabaseUrl: string, serviceKey: st
     errors.push(`Sync falhou: ${JSON.stringify(sync.data?.error || sync.data?.sales?.erros || "unknown").substring(0, 200)}`);
   }
 
-  // Step 3: Validate — count vendas loaded vs sales response
   const { count: vendasCount } = await supabase
     .from("transacoes_vendas")
     .select("id", { count: "exact", head: true })
@@ -145,14 +183,12 @@ async function importBankStatement(supabase: any, supabaseUrl: string, serviceKe
   if (!clinica_id) return jsonResponse({ error: "clinica_id obrigatório" }, 400);
 
   let content = file_content;
-  // If file_url provided (from Make), download it
   if (!content && file_url) {
     const res = await fetch(file_url);
     content = await res.text();
   }
   if (!content) return jsonResponse({ error: "file_content ou file_url obrigatório" }, 400);
 
-  // Idempotency check via hash
   const fileHash = await sha256(clinica_id + content);
   const { data: existing } = await supabase
     .from("import_runs")
@@ -165,7 +201,6 @@ async function importBankStatement(supabase: any, supabaseUrl: string, serviceKe
     return jsonResponse({ success: true, message: "Arquivo já processado anteriormente", import_run_id: existing.id, status: existing.status });
   }
 
-  // Create import run
   const { data: run } = await supabase.from("import_runs")
     .insert({
       clinica_id, tipo: "banco_ofx", origem: "webhook",
@@ -176,7 +211,6 @@ async function importBankStatement(supabase: any, supabaseUrl: string, serviceKe
     .select("id")
     .single();
 
-  // Call existing import-ofx function
   const result = await callEdgeFunction(supabaseUrl, serviceKey, "import-ofx", {
     clinica_id, ofx_content: content,
   });
@@ -276,7 +310,6 @@ async function importRepassesMedicos(supabase: any, body: any) {
     return jsonResponse({ error: "clinica_id e repasses[] obrigatórios" }, 400);
   }
 
-  // Find plano_contas for repasse médico (19.1)
   const { data: plano } = await supabase
     .from("plano_contas")
     .select("id")
@@ -288,7 +321,6 @@ async function importRepassesMedicos(supabase: any, body: any) {
     return jsonResponse({ error: "Plano de contas 19.1 (Mão de Obra Médica) não encontrado" }, 400);
   }
 
-  // Hash for idempotency
   const contentHash = await sha256(clinica_id + JSON.stringify(repasses));
   const { data: existing } = await supabase
     .from("import_runs")
@@ -314,7 +346,6 @@ async function importRepassesMedicos(supabase: any, body: any) {
   let rejeitados = 0;
   const erros: string[] = [];
 
-  // Lookup medicos
   const { data: medicos } = await supabase
     .from("medicos")
     .select("id, nome")
@@ -373,43 +404,85 @@ async function importRepassesMedicos(supabase: any, body: any) {
   return jsonResponse({ success: criados > 0, import_run_id: run?.id, criados, rejeitados, erros });
 }
 
+// ─── Action: autopilot_run ──────────────────────────────────────
+async function autopilotRun(supabase: any, supabaseUrl: string, serviceKey: string, body: any) {
+  const { clinica_id } = body;
+  if (!clinica_id) return jsonResponse({ error: "clinica_id obrigatório" }, 400);
+
+  const result = await callEdgeFunction(supabaseUrl, serviceKey, "autopilot-run", {
+    clinica_id,
+    trigger: "webhook",
+  });
+
+  return jsonResponse({ success: result.ok, ...result.data });
+}
+
+// ─── Action: recalculate_kpis ───────────────────────────────────
+async function recalculateKpis(supabase: any, body: any) {
+  const { clinica_id, start_date, end_date } = body;
+  if (!clinica_id) return jsonResponse({ error: "clinica_id obrigatório" }, 400);
+
+  const sd = start_date || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+  const ed = end_date || new Date().toISOString().slice(0, 10);
+
+  // Call existing DB functions
+  const { data: dre, error: dreErr } = await supabase.rpc("get_dre", { _start_date: sd, _end_date: ed });
+  const { data: cash, error: cashErr } = await supabase.rpc("get_cash_kpis", { _start_date: sd, _end_date: ed });
+
+  return jsonResponse({
+    success: !dreErr && !cashErr,
+    dre: dreErr ? { error: dreErr.message } : { ok: true },
+    cash: cashErr ? { error: cashErr.message } : { ok: true },
+    periodo: { start_date: sd, end_date: ed },
+  });
+}
+
+// ─── Action: process_comprovante ────────────────────────────────
+async function processComprovante(supabase: any, supabaseUrl: string, serviceKey: string, body: any) {
+  const { clinica_id, arquivo_url, arquivo_nome } = body;
+  if (!clinica_id || !arquivo_url) return jsonResponse({ error: "clinica_id e arquivo_url obrigatórios" }, 400);
+
+  const result = await callEdgeFunction(supabaseUrl, serviceKey, "process-comprovante", {
+    clinica_id, arquivo_url, arquivo_nome,
+  });
+
+  return jsonResponse({ success: result.ok, ...result.data });
+}
+
 // ─── MAIN ROUTER ────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Auth check: webhook secret OR service role OR valid Supabase JWT
-  if (!verifyWebhookAuth(req)) {
-    const authHeader = req.headers.get("authorization") || "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const isServiceRole = authHeader.includes(serviceKey) || authHeader === `Bearer ${serviceKey}`;
-    
-    if (!isServiceRole) {
-      // Try validating as a logged-in user via Supabase JWT
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-      const token = authHeader.replace("Bearer ", "");
-      if (!token) {
-        return jsonResponse({ error: "Unauthorized. Provide x-webhook-secret header or valid auth token." }, 401);
-      }
-      const userClient = createClient(supabaseUrl, anonKey, {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      });
-      const { data: claims, error: claimsErr } = await userClient.auth.getUser(token);
-      if (claimsErr || !claims?.user) {
-        return jsonResponse({ error: "Unauthorized. Invalid auth token." }, 401);
-      }
-    }
-  }
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
+  const headersPresent = getHeadersPresent(req);
+
+  // Auth: AUTOMATION_TOKEN via x-webhook-secret or Bearer, or valid Supabase JWT
+  if (!verifyAutomationToken(req)) {
+    // Try validating as a logged-in user via Supabase JWT
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const authHeader = req.headers.get("authorization") || "";
+    const token = authHeader.replace("Bearer ", "");
+    if (!token) {
+      return jsonResponse({ error: "Unauthorized. Provide x-webhook-secret header or valid auth token." }, 401);
+    }
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const { data: claims, error: claimsErr } = await userClient.auth.getUser(token);
+    if (claimsErr || !claims?.user) {
+      return jsonResponse({ error: "Unauthorized. Provide x-webhook-secret header or valid auth token." }, 401);
+    }
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const action = body.action;
+    const clinica_id = body.clinica_id || null;
 
     if (!action) {
       return jsonResponse({
@@ -420,24 +493,56 @@ Deno.serve(async (req) => {
           "import_getnet_statement",
           "run_reconciliation",
           "import_repasses_medicos",
+          "autopilot_run",
+          "recalculate_kpis",
+          "process_comprovante",
         ],
       }, 400);
     }
 
+    let response: Response;
+
     switch (action) {
       case "feegow_run_month":
-        return await feegowRunMonth(supabase, supabaseUrl, serviceKey, body);
+        response = await feegowRunMonth(supabase, supabaseUrl, serviceKey, body);
+        break;
       case "import_bank_statement":
-        return await importBankStatement(supabase, supabaseUrl, serviceKey, body);
+        response = await importBankStatement(supabase, supabaseUrl, serviceKey, body);
+        break;
       case "import_getnet_statement":
-        return await importGetnetStatement(supabase, supabaseUrl, serviceKey, body);
+        response = await importGetnetStatement(supabase, supabaseUrl, serviceKey, body);
+        break;
       case "run_reconciliation":
-        return await runReconciliation(supabase, supabaseUrl, serviceKey, body);
+        response = await runReconciliation(supabase, supabaseUrl, serviceKey, body);
+        break;
       case "import_repasses_medicos":
-        return await importRepassesMedicos(supabase, body);
+        response = await importRepassesMedicos(supabase, body);
+        break;
+      case "autopilot_run":
+        response = await autopilotRun(supabase, supabaseUrl, serviceKey, body);
+        break;
+      case "recalculate_kpis":
+        response = await recalculateKpis(supabase, body);
+        break;
+      case "process_comprovante":
+        response = await processComprovante(supabase, supabaseUrl, serviceKey, body);
+        break;
       default:
-        return jsonResponse({ error: `Action '${action}' desconhecida` }, 400);
+        response = jsonResponse({ error: `Action '${action}' desconhecida` }, 400);
     }
+
+    // Log to integracao_logs
+    const responseStatus = response.status === 200 ? "sucesso" : "erro";
+    if (clinica_id) {
+      await logIntegracao(supabase, {
+        clinica_id,
+        action,
+        status: responseStatus,
+        headers_present: headersPresent,
+      });
+    }
+
+    return response;
   } catch (e: any) {
     console.error("automation-webhook error:", e);
     return jsonResponse({ error: e.message }, 500);
