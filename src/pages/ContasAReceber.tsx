@@ -109,13 +109,13 @@ function TabAgregado({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
   const fetchData = async () => {
     setLoading(true);
 
-    // First try canonical table
+    // Try canonical table first
     const { data: aggData } = await supabase
       .from("contas_receber_agregado")
       .select("*")
       .eq("clinica_id", clinicaId!)
-      .gte("competencia", format(dateFrom, "yyyy-MM-dd"))
-      .lte("competencia", format(dateTo, "yyyy-MM-dd"))
+      .gte("data_base", format(dateFrom, "yyyy-MM-dd"))
+      .lte("data_base", format(dateTo, "yyyy-MM-dd"))
       .order("data_base", { ascending: false })
       .limit(500);
 
@@ -140,7 +140,7 @@ function TabAgregado({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
         const meio = mapFormaPgtoToMeio(v.forma_pagamento_enum);
         const key = `${v.data_competencia}|${meio}`;
         if (!grouped[key]) {
-          const comp = v.data_competencia.substring(0, 7) + "-01"; // first day of month
+          const comp = v.data_competencia.substring(0, 7) + "-01";
           grouped[key] = {
             id: key,
             tipo_recebivel: meio === "convenio" ? "convenio_nf" : meio === "dinheiro" ? "dinheiro" : "getnet",
@@ -162,7 +162,6 @@ function TabAgregado({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) {
           grouped[key].valor_recebido += Number(v.valor_bruto) || 0;
         }
       }
-      // Derive status
       const result = Object.values(grouped).map(r => {
         if (r.valor_recebido >= r.valor_esperado && r.valor_esperado > 0) r.status = "recebido";
         else if (r.valor_recebido > 0) r.status = "parcial";
