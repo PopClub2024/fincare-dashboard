@@ -936,6 +936,7 @@ export type Database = {
           banco_referencia: string | null
           canal_pagamento: Database["public"]["Enums"]["canal_pagamento"] | null
           clinica_id: string
+          competencia_referencia: string | null
           comprovante_id: string | null
           created_at: string
           data_competencia: string
@@ -966,6 +967,7 @@ export type Database = {
             | Database["public"]["Enums"]["canal_pagamento"]
             | null
           clinica_id: string
+          competencia_referencia?: string | null
           comprovante_id?: string | null
           created_at?: string
           data_competencia: string
@@ -998,6 +1000,7 @@ export type Database = {
             | Database["public"]["Enums"]["canal_pagamento"]
             | null
           clinica_id?: string
+          competencia_referencia?: string | null
           comprovante_id?: string | null
           created_at?: string
           data_competencia?: string

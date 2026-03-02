@@ -52,6 +52,8 @@ interface Lancamento {
   plano_contas_id: string | null;
   ofx_transaction_id: string | null;
   banco_referencia: string | null;
+  competencia_referencia: string | null;
+  observacao: string | null;
   plano_contas?: { codigo_estruturado: string; descricao: string; categoria: string } | null;
 }
 
@@ -101,6 +103,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("todos");
+  const [filterType, setFilterType] = useState("todos");
   const [showDialog, setShowDialog] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -206,9 +209,11 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
         || l.descricao?.toLowerCase().includes(searchTerm.toLowerCase())
         || l.fornecedor?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchStatus = filterStatus === "todos" || l.status === filterStatus;
-      return matchSearch && matchStatus;
+      const isRepasse = l.observacao?.toLowerCase().includes("repasse médico") || l.descricao?.toLowerCase().includes("repasse") || l.descricao?.toLowerCase().includes("servicos med");
+      const matchType = filterType === "todos" || (filterType === "repasse_medico" && isRepasse) || (filterType === "outros" && !isRepasse);
+      return matchSearch && matchStatus && matchType;
     });
-  }, [lancamentos, searchTerm, filterStatus]);
+  }, [lancamentos, searchTerm, filterStatus, filterType]);
 
   const statusLabel: Record<string, string> = {
     a_classificar: "A Classificar", classificado: "Classificado", pago: "Pago", cancelado: "Cancelado",
@@ -238,6 +243,14 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
             <SelectItem value="a_classificar">A Classificar</SelectItem>
             <SelectItem value="classificado">Classificado</SelectItem>
             <SelectItem value="pago">Pago</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterType} onValueChange={setFilterType}>
+          <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os tipos</SelectItem>
+            <SelectItem value="repasse_medico">Repasse Médico</SelectItem>
+            <SelectItem value="outros">Outros</SelectItem>
           </SelectContent>
         </Select>
         <Label htmlFor="comp-upload" className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input bg-muted/50 px-4 py-2 text-sm transition-colors hover:bg-muted">
@@ -322,12 +335,13 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
              <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Data</TableHead>
+                  <TableHead>Data Pgto</TableHead>
                   <TableHead>Descrição</TableHead>
                   <TableHead>Fornecedor</TableHead>
                   <TableHead>Banco</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
+                  <TableHead>Comp. Ref.</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -342,6 +356,26 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                       {l.plano_contas ? `${l.plano_contas.codigo_estruturado} - ${l.plano_contas.descricao}` : "—"}
                     </TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(l.valor)}</TableCell>
+                    <TableCell>
+                      <Input
+                        type="month"
+                        className="h-7 w-[130px] text-xs"
+                        value={l.competencia_referencia ? l.competencia_referencia.slice(0, 7) : ""}
+                        onChange={async (e) => {
+                          const val = e.target.value ? e.target.value + "-01" : null;
+                          const { error } = await supabase
+                            .from("contas_pagar_lancamentos")
+                            .update({ competencia_referencia: val } as any)
+                            .eq("id", l.id);
+                          if (error) toast.error(error.message);
+                          else {
+                            setLancamentos((prev) =>
+                              prev.map((item) => item.id === l.id ? { ...item, competencia_referencia: val } : item)
+                            );
+                          }
+                        }}
+                      />
+                    </TableCell>
                     <TableCell>
                       <Select
                         value={l.status}
