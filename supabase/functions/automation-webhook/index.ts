@@ -217,6 +217,10 @@ async function importBankStatement(supabase: any, supabaseUrl: string, serviceKe
 
   const status = result.ok ? (result.data?.errors?.length > 0 ? "erro_parcial" : "sucesso") : "erro";
 
+  // Derive period from imported data or params
+  const importPeriodStart = periodo_inicio || result.data?.period_start || null;
+  const importPeriodEnd = periodo_fim || result.data?.period_end || null;
+
   await supabase.from("import_runs")
     .update({
       status,
@@ -226,11 +230,30 @@ async function importBankStatement(supabase: any, supabaseUrl: string, serviceKe
       registros_ignorados: result.data?.skipped || 0,
       erros: result.data?.errors || [],
       detalhes: result.data,
+      periodo_inicio: importPeriodStart,
+      periodo_fim: importPeriodEnd,
       finished_at: new Date().toISOString(),
     })
     .eq("id", run?.id);
 
-  return jsonResponse({ success: result.ok, import_run_id: run?.id, ...result.data });
+  // Auto-chain: run reconciliation after import
+  if (result.ok && importPeriodStart && importPeriodEnd) {
+    try {
+      console.log(`Auto-chaining run-reconciliation for ${importPeriodStart} → ${importPeriodEnd}`);
+      const reconResult = await callEdgeFunction(supabaseUrl, serviceKey, "run-reconciliation", {
+        clinica_id, date_start: importPeriodStart, date_end: importPeriodEnd,
+      });
+      console.log(`Auto-reconciliation result: ok=${reconResult.ok}`);
+      // Also sync feegow caixa for the same period to ensure base is updated
+      await callEdgeFunction(supabaseUrl, serviceKey, "sync-feegow", {
+        clinica_id, action: "recebimentos_agregados", date_start: importPeriodStart, date_end: importPeriodEnd,
+      });
+    } catch (e: any) {
+      console.error("Auto-chain reconciliation error:", e.message);
+    }
+  }
+
+  return jsonResponse({ success: result.ok, import_run_id: run?.id, auto_reconciled: !!(result.ok && importPeriodStart && importPeriodEnd), ...result.data });
 }
 
 // ─── Action: import_getnet_statement ────────────────────────────
@@ -272,6 +295,9 @@ async function importGetnetStatement(supabase: any, supabaseUrl: string, service
 
   const status = result.ok ? (result.data?.errors?.length > 0 ? "erro_parcial" : "sucesso") : "erro";
 
+  const getnetPeriodStart = result.data?.periodo?.inicio || null;
+  const getnetPeriodEnd = result.data?.periodo?.fim || null;
+
   await supabase.from("import_runs")
     .update({
       status,
@@ -280,13 +306,29 @@ async function importGetnetStatement(supabase: any, supabaseUrl: string, service
       registros_ignorados: result.data?.skipped || 0,
       erros: result.data?.errors || [],
       detalhes: result.data,
-      periodo_inicio: result.data?.periodo?.inicio,
-      periodo_fim: result.data?.periodo?.fim,
+      periodo_inicio: getnetPeriodStart,
+      periodo_fim: getnetPeriodEnd,
       finished_at: new Date().toISOString(),
     })
     .eq("id", run?.id);
 
-  return jsonResponse({ success: result.ok, import_run_id: run?.id, ...result.data });
+  // Auto-chain: run reconciliation after Getnet import
+  if (result.ok && getnetPeriodStart && getnetPeriodEnd) {
+    try {
+      console.log(`Auto-chaining run-reconciliation for Getnet ${getnetPeriodStart} → ${getnetPeriodEnd}`);
+      await callEdgeFunction(supabaseUrl, serviceKey, "run-reconciliation", {
+        clinica_id, date_start: getnetPeriodStart, date_end: getnetPeriodEnd,
+      });
+      // Sync feegow caixa to keep CR agregado fresh
+      await callEdgeFunction(supabaseUrl, serviceKey, "sync-feegow", {
+        clinica_id, action: "recebimentos_agregados", date_start: getnetPeriodStart, date_end: getnetPeriodEnd,
+      });
+    } catch (e: any) {
+      console.error("Auto-chain reconciliation error (Getnet):", e.message);
+    }
+  }
+
+  return jsonResponse({ success: result.ok, import_run_id: run?.id, auto_reconciled: !!(result.ok && getnetPeriodStart && getnetPeriodEnd), ...result.data });
 }
 
 // ─── Action: import_getnet_recebiveis ───────────────────────────
