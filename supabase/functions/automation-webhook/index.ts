@@ -609,26 +609,12 @@ async function jobStatus(supabase: any, body: any) {
 
 // ─── Action: autopilot_run ──────────────────────────────────────
 async function autopilotRun(supabase: any, supabaseUrl: string, serviceKey: string, body: any) {
-  const { clinica_id, period_days, start_date, end_date, trigger } = body;
+  const { clinica_id } = body;
   if (!clinica_id) return jsonResponse({ error: "clinica_id obrigatório" }, 400);
-
-  // Compute dates: explicit start/end takes priority, then period_days, default 30
-  let sd = start_date;
-  let ed = end_date;
-  if (!sd || !ed) {
-    const days = period_days || 30;
-    const now = new Date();
-    ed = now.toISOString().slice(0, 10);
-    const from = new Date(now);
-    from.setDate(from.getDate() - days);
-    sd = from.toISOString().slice(0, 10);
-  }
 
   const result = await callEdgeFunction(supabaseUrl, serviceKey, "autopilot-run", {
     clinica_id,
-    trigger: trigger || "webhook",
-    start_date: sd,
-    end_date: ed,
+    trigger: "webhook",
   });
 
   return jsonResponse({ success: result.ok, ...result.data });
