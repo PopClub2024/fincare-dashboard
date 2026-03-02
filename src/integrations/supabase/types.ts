@@ -1997,6 +1997,53 @@ export type Database = {
           },
         ]
       }
+      integracao_jobs: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          job_type: string
+          params: Json
+          progress: Json | null
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type: string
+          params?: Json
+          progress?: Json | null
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type?: string
+          params?: Json
+          progress?: Json | null
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracao_jobs_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integracao_logs: {
         Row: {
           acao: string | null
