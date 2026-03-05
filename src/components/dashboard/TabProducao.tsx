@@ -4,7 +4,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,28 +52,54 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
   const [vendas, setVendas] = useState<VendaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
+  const [filtroProfissional, setFiltroProfissional] = useState<string>("todos");
+  const [filtroProcedimento, setFiltroProcedimento] = useState<string>("todos");
+  const [filtroPagador, setFiltroPagador] = useState<string>("todos");
+  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [baixaDialog, setBaixaDialog] = useState<VendaRow | null>(null);
   const [baixaLoading, setBaixaLoading] = useState(false);
   const [baixaObs, setBaixaObs] = useState("");
   const [baixaData, setBaixaData] = useState(format(new Date(), "yyyy-MM-dd"));
 
+  // No-show data from operacao_producao
+  const [totalAgendamentos, setTotalAgendamentos] = useState(0);
+  const [totalFaltas, setTotalFaltas] = useState(0);
+  const [totalCancelados, setTotalCancelados] = useState(0);
+
   useEffect(() => {
     if (!clinicaId) return;
     setLoading(true);
-    supabase
+    const from = format(dateFrom, "yyyy-MM-dd");
+    const to = format(dateTo, "yyyy-MM-dd");
+
+    const vendasQuery = supabase
       .from("transacoes_vendas")
       .select("id, feegow_id, data_competencia, procedimento, especialidade, valor_bruto, forma_pagamento, status_recebimento, data_prevista_recebimento, status_presenca, convenio_id, quantidade, observacao, medicos(nome), pacientes(nome), convenios(nome, prazo_repasse_dias)")
       .eq("clinica_id", clinicaId)
-      .gte("data_competencia", format(dateFrom, "yyyy-MM-dd"))
-      .lte("data_competencia", format(dateTo, "yyyy-MM-dd"))
+      .gte("data_competencia", from)
+      .lte("data_competencia", to)
       .not("feegow_id", "like", "inv_%")
       .order("data_competencia", { ascending: false })
-      .limit(1000)
-      .then(({ data, error }) => {
-        if (error) { toast.error(error.message); return; }
-        setVendas((data as unknown as VendaRow[]) || []);
-        setLoading(false);
-      });
+      .limit(1000);
+
+    const presencaQuery = supabase
+      .from("operacao_producao")
+      .select("status_presenca")
+      .eq("clinica_id", clinicaId)
+      .gte("data_competencia", from)
+      .lte("data_competencia", to);
+
+    Promise.all([vendasQuery, presencaQuery]).then(([vendasRes, presencaRes]) => {
+      if (vendasRes.error) { toast.error(vendasRes.error.message); }
+      setVendas((vendasRes.data as unknown as VendaRow[]) || []);
+
+      const ops = presencaRes.data || [];
+      setTotalAgendamentos(ops.length);
+      setTotalFaltas(ops.filter((o: any) => o.status_presenca === "faltou").length);
+      setTotalCancelados(ops.filter((o: any) => o.status_presenca === "cancelado_paciente").length);
+
+      setLoading(false);
+    });
   }, [clinicaId, dateFrom, dateTo]);
 
   const handleBaixa = useCallback(async () => {
@@ -105,19 +130,46 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
     setBaixaData(format(new Date(), "yyyy-MM-dd"));
   }, [baixaDialog, baixaData, baixaObs]);
 
-  // Classify production type from procedimento/especialidade
   const classifyTipo = (v: VendaRow): string => {
     const proc = (v.procedimento || "").toLowerCase();
-    const esp = (v.especialidade || "").toLowerCase();
     if (proc.includes("exame") || proc.includes("laborat") || proc.includes("hemograma") || proc.includes("raio") || proc.includes("ultrassom") || proc.includes("eletro") || proc.includes("holter") || proc.includes("mapa") || proc.includes("espiro")) return "exame";
     if (proc.includes("procedimento") || proc.includes("cirurg") || proc.includes("biops") || proc.includes("sutur") || proc.includes("drenag") || proc.includes("cauteriz")) return "procedimento";
     return "consulta";
   };
 
+  // Dynamic filter options
+  const profissionais = useMemo(() => {
+    const set = new Set<string>();
+    vendas.forEach((v) => { const n = (v.medicos as any)?.nome; if (n) set.add(n); });
+    return Array.from(set).sort();
+  }, [vendas]);
+
+  const procedimentos = useMemo(() => {
+    const map = new Map<string, number>();
+    vendas.forEach((v) => { const p = v.procedimento; if (p) map.set(p, (map.get(p) || 0) + 1); });
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([n]) => n);
+  }, [vendas]);
+
+  const pagadores = useMemo(() => {
+    const set = new Set<string>();
+    set.add("Particular");
+    vendas.forEach((v) => { const n = v.convenio_id ? (v.convenios as any)?.nome : null; if (n) set.add(n); });
+    return Array.from(set).sort();
+  }, [vendas]);
+
   const vendasFiltradas = useMemo(() => {
-    if (filtroTipo === "todos") return vendas;
-    return vendas.filter((v) => classifyTipo(v) === filtroTipo);
-  }, [vendas, filtroTipo]);
+    return vendas.filter((v) => {
+      if (filtroTipo !== "todos" && classifyTipo(v) !== filtroTipo) return false;
+      if (filtroProfissional !== "todos" && ((v.medicos as any)?.nome || "") !== filtroProfissional) return false;
+      if (filtroProcedimento !== "todos" && v.procedimento !== filtroProcedimento) return false;
+      if (filtroPagador !== "todos") {
+        const pagador = v.convenio_id ? ((v.convenios as any)?.nome || "Convênio") : "Particular";
+        if (pagador !== filtroPagador) return false;
+      }
+      if (filtroStatus !== "todos" && v.status_recebimento !== filtroStatus) return false;
+      return true;
+    });
+  }, [vendas, filtroTipo, filtroProfissional, filtroProcedimento, filtroPagador, filtroStatus]);
 
   if (loading) {
     return (
@@ -130,8 +182,7 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
   const totalAtendimentos = vendasFiltradas.length;
   const receitaBruta = vendasFiltradas.reduce((s, c) => s + c.valor_bruto, 0);
   const ticketMedio = totalAtendimentos > 0 ? receitaBruta / totalAtendimentos : 0;
-  const faltas = vendasFiltradas.filter((c) => c.status_presenca === "faltou").length;
-  const taxaFalta = totalAtendimentos > 0 ? (faltas / totalAtendimentos) * 100 : 0;
+  const taxaFalta = totalAgendamentos > 0 ? ((totalFaltas + totalCancelados) / totalAgendamentos) * 100 : 0;
   const totalQuantidade = vendasFiltradas.reduce((s, c) => s + (c.quantidade || 1), 0);
 
   // Production by type
@@ -218,17 +269,9 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
     }
   };
 
-  const tipoIcon = (tipo: string) => {
-    switch (tipo) {
-      case "exame": return <FlaskConical className="h-4 w-4" />;
-      case "procedimento": return <Syringe className="h-4 w-4" />;
-      default: return <Stethoscope className="h-4 w-4" />;
-    }
-  };
-
   return (
     <div className="space-y-6">
-      {/* Filter */}
+      {/* Global type filter */}
       <div className="flex items-center gap-3">
         <Select value={filtroTipo} onValueChange={setFiltroTipo}>
           <SelectTrigger className="w-48">
@@ -250,7 +293,13 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
         <SummaryCard icon={<DollarSign className="h-4 w-4" />} label="Receita Bruta" value={fmt(receitaBruta)} />
         <SummaryCard icon={<TrendingUp className="h-4 w-4" />} label="Ticket Médio" value={fmt(ticketMedio)} />
         <SummaryCard icon={<Activity className="h-4 w-4" />} label="Qtd Procedimentos" value={totalQuantidade.toString()} />
-        <SummaryCard icon={<UserX className="h-4 w-4" />} label="Taxa de Falta" value={`${taxaFalta.toFixed(1)}%`} negative={taxaFalta > 10} />
+        <SummaryCard
+          icon={<UserX className="h-4 w-4" />}
+          label="Taxa de Falta"
+          value={`${taxaFalta.toFixed(1)}%`}
+          subtitle={`${totalFaltas} faltas · ${totalCancelados} canc. / ${totalAgendamentos} agend.`}
+          negative={taxaFalta > 10}
+        />
       </div>
 
       {/* Charts row */}
@@ -376,9 +425,66 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
         </CardContent>
       </Card>
 
-      {/* Production Table */}
+      {/* Production Table with filters */}
       <Card className="border-0 shadow-md">
-        <CardHeader><CardTitle className="text-lg">Produção Realizada</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-lg">Produção Realizada</CardTitle>
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <Select value={filtroProfissional} onValueChange={setFiltroProfissional}>
+              <SelectTrigger className="w-44 h-8 text-xs">
+                <SelectValue placeholder="Profissional" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos profissionais</SelectItem>
+                {profissionais.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filtroProcedimento} onValueChange={setFiltroProcedimento}>
+              <SelectTrigger className="w-48 h-8 text-xs">
+                <SelectValue placeholder="Procedimento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos procedimentos</SelectItem>
+                {procedimentos.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filtroPagador} onValueChange={setFiltroPagador}>
+              <SelectTrigger className="w-40 h-8 text-xs">
+                <SelectValue placeholder="Pagador" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos pagadores</SelectItem>
+                {pagadores.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+              <SelectTrigger className="w-36 h-8 text-xs">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos status</SelectItem>
+                <SelectItem value="recebido">Recebido</SelectItem>
+                <SelectItem value="a_receber">A Receber</SelectItem>
+                <SelectItem value="inadimplente">Inadimplente</SelectItem>
+              </SelectContent>
+            </Select>
+            {(filtroProfissional !== "todos" || filtroProcedimento !== "todos" || filtroPagador !== "todos" || filtroStatus !== "todos") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  setFiltroProfissional("todos");
+                  setFiltroProcedimento("todos");
+                  setFiltroPagador("todos");
+                  setFiltroStatus("todos");
+                }}
+              >
+                Limpar filtros
+              </Button>
+            )}
+          </div>
+        </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
@@ -391,6 +497,7 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
                 <TableHead>Pagador</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Presença</TableHead>
                 <TableHead>Previsão</TableHead>
                 <TableHead className="text-center">Ação</TableHead>
               </TableRow>
@@ -406,6 +513,7 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
                   <TableCell>{c.convenio_id ? (c.convenios as any)?.nome || "Convênio" : "Particular"}</TableCell>
                   <TableCell className="text-right font-medium">{fmt(c.valor_bruto)}</TableCell>
                   <TableCell>{statusBadge(c.status_recebimento)}</TableCell>
+                  <TableCell>{presencaBadge(c.status_presenca)}</TableCell>
                   <TableCell className="whitespace-nowrap">{c.data_prevista_recebimento || "—"}</TableCell>
                   <TableCell className="text-center">
                     {c.status_recebimento === "a_receber" || c.status_recebimento === "inadimplente" ? (
@@ -491,7 +599,21 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
   );
 }
 
-function SummaryCard({ icon, label, value, negative }: { icon: React.ReactNode; label: string; value: string; negative?: boolean }) {
+function presencaBadge(status: string | null) {
+  switch (status) {
+    case "atendido": return <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[10px]">Atendido</Badge>;
+    case "faltou": return <Badge className="bg-red-100 text-red-700 border-0 text-[10px]">Faltou</Badge>;
+    case "cancelado_paciente": return <Badge className="bg-orange-100 text-orange-700 border-0 text-[10px]">Canc. Pac.</Badge>;
+    case "cancelado": return <Badge className="bg-muted text-muted-foreground border-0 text-[10px]">Cancelado</Badge>;
+    case "confirmado": return <Badge className="bg-blue-100 text-blue-700 border-0 text-[10px]">Confirmado</Badge>;
+    case "em_espera": return <Badge className="bg-amber-100 text-amber-700 border-0 text-[10px]">Em Espera</Badge>;
+    case "em_atendimento": return <Badge className="bg-blue-100 text-blue-700 border-0 text-[10px]">Em Atend.</Badge>;
+    case "agendado": return <Badge variant="outline" className="text-[10px]">Agendado</Badge>;
+    default: return <span className="text-xs text-muted-foreground">—</span>;
+  }
+}
+
+function SummaryCard({ icon, label, value, subtitle, negative }: { icon: React.ReactNode; label: string; value: string; subtitle?: string; negative?: boolean }) {
   return (
     <Card className="border-0 shadow-md">
       <CardContent className="p-4">
@@ -500,6 +622,7 @@ function SummaryCard({ icon, label, value, negative }: { icon: React.ReactNode; 
           <div className="rounded-md bg-accent p-1.5">{icon}</div>
         </div>
         <p className={`text-lg font-bold ${negative ? "text-destructive" : "text-foreground"}`}>{value}</p>
+        {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
       </CardContent>
     </Card>
   );
