@@ -404,22 +404,26 @@ async function syncPeriod(
         5: "em_atendimento", 6: "faltou", 7: "cancelado_paciente", 11: "cancelado", 16: "cancelado", 22: "atendido",
       };
       const statusPresenca = statusMap[Number(appt.status_id || 0)] || "agendado";
-      const isCancelled = ["cancelado", "cancelado_paciente", "faltou"].includes(statusPresenca);
-
-      if (isCancelled) {
+      // Skip only clinic-initiated cancellations; keep "faltou" and "cancelado_paciente"
+      if (statusPresenca === "cancelado") {
         stats.ignorados++;
         continue;
       }
 
-      let valorBruto = parseFeegowValue(appt.valor_total_agendamento) || parseFeegowValue(appt.valor);
+      const isFaltaOuCancelado = ["faltou", "cancelado_paciente"].includes(statusPresenca);
+
+      let valorBruto = 0;
       let invoiceId: string | null = null;
-      if (valorBruto <= 0) {
-        const dateSales = salesByDate.get(dataComp) || [];
-        const unmatchedSale = dateSales.find(s => !s.matched);
-        if (unmatchedSale) {
-          valorBruto = unmatchedSale.amount;
-          invoiceId = String(unmatchedSale.invoice_id);
-          unmatchedSale.matched = true;
+      if (!isFaltaOuCancelado) {
+        valorBruto = parseFeegowValue(appt.valor_total_agendamento) || parseFeegowValue(appt.valor);
+        if (valorBruto <= 0) {
+          const dateSales = salesByDate.get(dataComp) || [];
+          const unmatchedSale = dateSales.find(s => !s.matched);
+          if (unmatchedSale) {
+            valorBruto = unmatchedSale.amount;
+            invoiceId = String(unmatchedSale.invoice_id);
+            unmatchedSale.matched = true;
+          }
         }
       }
 
