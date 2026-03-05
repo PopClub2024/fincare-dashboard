@@ -536,6 +536,13 @@ export default function TabProducao({ dateFrom, dateTo }: Props) {
                   </TableCell>
                 </TableRow>
               ))}
+              {vendasFiltradas.length > 0 && (
+                <TableRow className="bg-muted/50 font-bold">
+                  <TableCell colSpan={6}>Total</TableCell>
+                  <TableCell className="text-right">{fmt(vendasFiltradas.reduce((s, c) => s + c.valor_bruto, 0))}</TableCell>
+                  <TableCell colSpan={4} className="text-sm">{vendasFiltradas.length} itens</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
           {vendasFiltradas.length > 50 && (
