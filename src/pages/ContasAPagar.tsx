@@ -18,8 +18,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
-  Plus, Upload, Search, FileText, CheckCircle2, Clock, AlertCircle, Banknote, X,
+  Plus, Upload, Search, FileText, CheckCircle2, Clock, AlertCircle, Banknote, X, Trash2, Eye, Image,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -80,13 +84,15 @@ export default function ContasAPagar() {
         <DashboardFilters filters={filters} onFilterChange={setFilters} />
 
         <Tabs defaultValue="lancamentos" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 bg-muted">
+          <TabsList className="grid w-full grid-cols-4 bg-muted">
             <TabsTrigger value="lancamentos">Lançamentos</TabsTrigger>
+            <TabsTrigger value="comprovantes">Comprovantes</TabsTrigger>
             <TabsTrigger value="plano">Plano de Contas</TabsTrigger>
             <TabsTrigger value="conciliacao">Conciliação</TabsTrigger>
           </TabsList>
 
           <TabsContent value="lancamentos"><TabLancamentos dateFrom={filters.dateFrom} dateTo={filters.dateTo} /></TabsContent>
+          <TabsContent value="comprovantes"><TabComprovantes /></TabsContent>
           <TabsContent value="plano"><TabPlanoContas /></TabsContent>
           <TabsContent value="conciliacao"><TabConciliacao /></TabsContent>
         </Tabs>
@@ -160,6 +166,12 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
     const { error } = await supabase.from("contas_pagar_lancamentos").insert(insertData as any);
     if (error) toast.error(error.message);
     else { toast.success("Lançamento criado!"); setShowDialog(false); fetchLancamentos(); }
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from("contas_pagar_lancamentos").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("Lançamento excluído"); setLancamentos((prev) => prev.filter((l) => l.id !== id)); }
   };
 
   const handleUploadComprovante = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -348,12 +360,13 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                   <TableHead>Banco</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Comp. Ref.</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((l) => (
+                   <TableHead>Comp. Ref.</TableHead>
+                   <TableHead>Status</TableHead>
+                   <TableHead className="w-[50px]"></TableHead>
+                 </TableRow>
+               </TableHeader>
+               <TableBody>
+                 {filtered.map((l) => (
                   <TableRow key={l.id}>
                     <TableCell className="whitespace-nowrap">{new Date(l.data_competencia + "T12:00:00").toLocaleDateString("pt-BR")}</TableCell>
                     <TableCell className="font-medium max-w-[200px] truncate">{l.descricao || "—"}</TableCell>
@@ -414,13 +427,260 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                         </SelectContent>
                       </Select>
                     </TableCell>
-                  </TableRow>
-                ))}
+                    <TableCell>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir lançamento?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {l.descricao || l.fornecedor || "Este lançamento"} — {formatCurrency(l.valor)}. Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(l.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                   </TableRow>
+                 ))}
+               </TableBody>
+             </Table>
+           )}
+         </CardContent>
+       </Card>
+     </div>
+   );
+ }
+
+// ======================= TAB: COMPROVANTES =======================
+interface Comprovante {
+  id: string;
+  arquivo_url: string;
+  arquivo_nome: string | null;
+  tipo_arquivo: string | null;
+  status: string;
+  dados_extraidos: any;
+  created_at: string;
+  lancamento_id: string | null;
+}
+
+function TabComprovantes() {
+  const { clinicaId } = useAuth();
+  const [comprovantes, setComprovantes] = useState<Comprovante[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!clinicaId) return;
+    fetchComprovantes();
+  }, [clinicaId]);
+
+  const fetchComprovantes = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("comprovantes")
+      .select("id, arquivo_url, arquivo_nome, tipo_arquivo, status, dados_extraidos, created_at, lancamento_id")
+      .eq("clinica_id", clinicaId!)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    setComprovantes((data as any[]) || []);
+    setLoading(false);
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+
+    for (const file of Array.from(files)) {
+      try {
+        const sanitizedName = file.name
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-zA-Z0-9._-]/g, "_");
+        const filePath = `${clinicaId}/${Date.now()}_${sanitizedName}`;
+        const { error: upErr } = await supabase.storage.from("comprovantes").upload(filePath, file);
+        if (upErr) { toast.error("Erro no upload: " + upErr.message); continue; }
+
+        const { data: urlData } = supabase.storage.from("comprovantes").getPublicUrl(filePath);
+
+        const { data: comp, error: compErr } = await supabase.from("comprovantes").insert({
+          clinica_id: clinicaId!,
+          arquivo_url: urlData.publicUrl,
+          arquivo_nome: file.name,
+          tipo_arquivo: file.type,
+          status: "pendente",
+        }).select().single();
+
+        if (compErr) { toast.error(compErr.message); continue; }
+
+        // Convert to base64 for AI
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let binary = "";
+        const CHUNK = 8192;
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+        }
+        const image_base64 = btoa(binary);
+
+        toast.info(`Processando ${file.name}...`);
+        const { error: fnErr } = await supabase.functions.invoke("process-comprovante", {
+          body: { clinica_id: clinicaId, image_base64, filename: file.name, mime_type: file.type },
+        });
+
+        if (fnErr) toast.error(`Erro em ${file.name}: ${fnErr.message}`);
+        else toast.success(`${file.name} processado!`);
+      } catch (err: any) {
+        toast.error(`Erro: ${err.message}`);
+      }
+    }
+
+    setUploading(false);
+    e.target.value = "";
+    fetchComprovantes();
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from("comprovantes").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("Comprovante excluído"); setComprovantes((prev) => prev.filter((c) => c.id !== id)); }
+  };
+
+  const statusLabel: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
+    pendente: { label: "Pendente", variant: "outline" },
+    processado: { label: "Processado", variant: "default" },
+    erro: { label: "Erro", variant: "destructive" },
+    vinculado: { label: "Vinculado", variant: "secondary" },
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Comprovantes</h3>
+          <p className="text-sm text-muted-foreground">Suba comprovantes para identificação automática via IA</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="comp-multi-upload" className="flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90">
+            <Upload className="h-4 w-4" />
+            {uploading ? "Processando..." : "Enviar Comprovantes"}
+          </Label>
+          <Input id="comp-multi-upload" type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center p-12">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        </div>
+      ) : comprovantes.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <Image className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+            <p className="text-lg font-semibold">Nenhum comprovante</p>
+            <p className="text-sm text-muted-foreground mt-1">Envie fotos ou PDFs de comprovantes para identificação automática.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Arquivo</TableHead>
+                  <TableHead>Data Upload</TableHead>
+                  <TableHead>Fornecedor</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead>Data Pgto</TableHead>
+                  <TableHead>Classificação</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[80px]">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {comprovantes.map((c) => {
+                  const ext = c.dados_extraidos || {};
+                  return (
+                    <TableRow key={c.id}>
+                      <TableCell>
+                        <button onClick={() => setPreviewUrl(c.arquivo_url)} className="flex items-center gap-2 text-sm text-primary hover:underline">
+                          <FileText className="h-4 w-4" />
+                          <span className="truncate max-w-[150px]">{c.arquivo_nome || "comprovante"}</span>
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">
+                        {new Date(c.created_at).toLocaleDateString("pt-BR")}
+                      </TableCell>
+                      <TableCell className="text-sm">{ext.fornecedor || "—"}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">
+                        {ext.valor ? formatCurrency(ext.valor) : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">{ext.data_pagamento || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {ext.plano_contas_codigo_estruturado ? `${ext.plano_contas_codigo_estruturado} - ${ext.descricao || ""}` : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusLabel[c.status]?.variant || "outline"}>
+                          {statusLabel[c.status]?.label || c.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPreviewUrl(c.arquivo_url)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Excluir comprovante?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  {c.arquivo_nome || "Este comprovante"} será excluído permanentemente.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(c.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                  Excluir
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh]">
+          <DialogHeader><DialogTitle>Visualizar Comprovante</DialogTitle></DialogHeader>
+          {previewUrl && (
+            previewUrl.match(/\.pdf/i)
+              ? <iframe src={previewUrl} className="w-full h-[70vh] rounded" />
+              : <img src={previewUrl} alt="Comprovante" className="w-full max-h-[70vh] object-contain rounded" />
           )}
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
