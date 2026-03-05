@@ -167,7 +167,11 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
     if (!file) return;
     setUploading(true);
 
-    const filePath = `${clinicaId}/${Date.now()}_${file.name}`;
+    // Sanitize filename: remove accents and special chars for storage compatibility
+    const sanitizedName = file.name
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filePath = `${clinicaId}/${Date.now()}_${sanitizedName}`;
     const { error: upErr } = await supabase.storage.from("comprovantes").upload(filePath, file);
     if (upErr) { toast.error("Erro no upload: " + upErr.message); setUploading(false); return; }
 
@@ -183,16 +187,19 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
 
     if (compErr) { toast.error(compErr.message); setUploading(false); return; }
 
-    // Convert image to base64 for AI
-    let image_base64: string | null = null;
-    if (file.type.startsWith("image/")) {
-      const buffer = await file.arrayBuffer();
-      image_base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    // Convert file to base64 for AI (images and PDFs)
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const CHUNK = 8192;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
     }
+    const image_base64 = btoa(binary);
 
     toast.info("Processando comprovante com IA...");
     const { data: result, error: fnErr } = await supabase.functions.invoke("process-comprovante", {
-      body: { clinica_id: clinicaId, comprovante_id: comp.id, image_base64 },
+      body: { clinica_id: clinicaId, image_base64, filename: file.name, mime_type: file.type },
     });
 
     if (fnErr) toast.error("Erro no processamento: " + fnErr.message);
