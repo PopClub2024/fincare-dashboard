@@ -838,7 +838,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                 <Button
                   onClick={handleBaixa}
                   disabled={savingBaixa}
-                  style={{ background: "#1D9E75", color: "white" }}
+                  className="bg-success text-success-foreground hover:bg-success/90"
                 >
                   {savingBaixa ? "Salvando..." : "Confirmar baixa"}
                 </Button>
