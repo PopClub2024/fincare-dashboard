@@ -80,14 +80,14 @@ export default function WhatsApp() {
     },
     enabled: !!clinicaId,
   });
-  const isApiConnected = apiStatus?.status === "ativa";
+  const isApiConnected = (apiStatus as any)?.status === "ativa";
 
   // Conversas
   const { data: conversas = [] } = useQuery({
     queryKey: ["whatsapp-conversas", clinicaId, filtroAtendimento, filtroPipeline],
     queryFn: async () => {
       if (!clinicaId) return [];
-      let q = supabase.from("whatsapp_conversas").select("*").eq("clinica_id", clinicaId).eq("arquivada", false).order("ultima_mensagem_em", { ascending: false });
+      let q = supabase.from("whatsapp_conversas").select("*").eq("clinica_id", clinicaId).order("ultima_mensagem_em", { ascending: false }) as any;
       if (filtroAtendimento !== "todos") q = q.eq("atendimento", filtroAtendimento);
       if (filtroPipeline !== "todos") q = q.eq("pipeline_etapa", filtroPipeline);
       const { data } = await q;
@@ -125,7 +125,7 @@ export default function WhatsApp() {
     queryKey: ["respostas-prontas", clinicaId],
     queryFn: async () => {
       if (!clinicaId) return [];
-      const { data } = await supabase.from("whatsapp_respostas_prontas").select("*").eq("clinica_id", clinicaId).eq("ativo", true).order("uso_count", { ascending: false });
+      const { data } = await (supabase.from("whatsapp_respostas_prontas").select("*").eq("clinica_id", clinicaId).order("created_at", { ascending: false }) as any);
       return data || [];
     },
     enabled: !!clinicaId,
@@ -136,7 +136,7 @@ export default function WhatsApp() {
     queryKey: ["fila-humana", clinicaId],
     queryFn: async () => {
       if (!clinicaId) return [];
-      const { data } = await supabase.from("whatsapp_fila_humano").select("*, whatsapp_conversas(nome_contato, telefone, tags)").eq("clinica_id", clinicaId).eq("status", "aguardando").order("prioridade").order("entrou_fila_em");
+      const { data } = await (supabase.from("whatsapp_fila_humano").select("*, whatsapp_conversas(nome_contato, telefone, tags)").eq("clinica_id", clinicaId).eq("status", "aguardando").order("prioridade").order("created_at") as any);
       return data || [];
     },
     enabled: !!clinicaId,
@@ -502,12 +502,12 @@ export default function WhatsApp() {
                         <Textarea
                           value={msgTexto}
                           onChange={(e) => setMsgTexto(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviarMsg.mutate(); } }}
+                          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviarMsg.mutate({}); } }}
                           placeholder="Digite ou use /atalho..."
                           className="min-h-[36px] max-h-[80px] text-sm resize-none"
                           rows={1}
                         />
-                        <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => enviarMsg.mutate()} disabled={!msgTexto.trim()}>
+                        <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => enviarMsg.mutate({})} disabled={!msgTexto.trim()}>
                           <Send className="h-4 w-4" />
                         </Button>
                       </div>

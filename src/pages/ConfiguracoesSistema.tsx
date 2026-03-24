@@ -175,11 +175,11 @@ export default function ConfiguracoesSistema() {
     queryKey: ["rag-docs", ragAgent?.id],
     queryFn: async () => {
       if (!ragAgent?.id) return [];
-      const { data } = await supabase
-        .from("rag_documentos")
+      const { data } = await (supabase
+        .from("documentos_upload")
         .select("*")
-        .eq("knowledge_base_id", knowledgeBases.find((kb: any) => kb.agente_id === ragAgent.id)?.id || "none")
-        .order("created_at", { ascending: false });
+        .eq("clinica_id", clinicaId as string)
+        .order("created_at", { ascending: false }) as any);
       return data || [];
     },
     enabled: !!ragAgent?.id,
