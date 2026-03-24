@@ -994,7 +994,7 @@ function TabComprovantes() {
       render: (c: Comprovante) => {
         const ext = c.dados_extraidos || {};
         return (
-          <span className="text-[13px]" style={{ fontWeight: 500 }}>
+          <span className="text-[13px] font-medium">
             {ext.valor ? formatCurrency(ext.valor) : "—"}
           </span>
         );
