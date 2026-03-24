@@ -855,7 +855,10 @@ export type Database = {
           clinica_id: string
           created_at: string | null
           id: string
+          resultado_teste: string | null
           servico: string
+          status: string | null
+          ultimo_teste: string | null
           updated_at: string | null
         }
         Insert: {
@@ -864,7 +867,10 @@ export type Database = {
           clinica_id: string
           created_at?: string | null
           id?: string
+          resultado_teste?: string | null
           servico: string
+          status?: string | null
+          ultimo_teste?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -873,7 +879,10 @@ export type Database = {
           clinica_id?: string
           created_at?: string | null
           id?: string
+          resultado_teste?: string | null
           servico?: string
+          status?: string | null
+          ultimo_teste?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -2314,36 +2323,42 @@ export type Database = {
         Row: {
           ativo: boolean
           clinica_id: string
+          cnpj: string | null
           created_at: string
           credenciador_pagador: string | null
           feegow_id: string | null
           id: string
           nome: string
           prazo_repasse_dias: number | null
+          registro_ans: string | null
           taxa_adm_percent: number | null
           updated_at: string
         }
         Insert: {
           ativo?: boolean
           clinica_id: string
+          cnpj?: string | null
           created_at?: string
           credenciador_pagador?: string | null
           feegow_id?: string | null
           id?: string
           nome: string
           prazo_repasse_dias?: number | null
+          registro_ans?: string | null
           taxa_adm_percent?: number | null
           updated_at?: string
         }
         Update: {
           ativo?: boolean
           clinica_id?: string
+          cnpj?: string | null
           created_at?: string
           credenciador_pagador?: string | null
           feegow_id?: string | null
           id?: string
           nome?: string
           prazo_repasse_dias?: number | null
+          registro_ans?: string | null
           taxa_adm_percent?: number | null
           updated_at?: string
         }
@@ -4740,37 +4755,70 @@ export type Database = {
         Row: {
           ativo: boolean
           clinica_id: string
+          conselho: string | null
+          cpf: string | null
           created_at: string
           crm: string | null
           documento: string | null
+          documento_conselho: string | null
+          email: string | null
           especialidade: string | null
+          especialidades: Json | null
           feegow_id: string | null
           id: string
+          idade_maxima: number | null
+          idade_minima: number | null
           nome: string
+          rqe: string | null
+          sexo: string | null
+          tratamento: string | null
+          uf_conselho: string | null
           updated_at: string
         }
         Insert: {
           ativo?: boolean
           clinica_id: string
+          conselho?: string | null
+          cpf?: string | null
           created_at?: string
           crm?: string | null
           documento?: string | null
+          documento_conselho?: string | null
+          email?: string | null
           especialidade?: string | null
+          especialidades?: Json | null
           feegow_id?: string | null
           id?: string
+          idade_maxima?: number | null
+          idade_minima?: number | null
           nome: string
+          rqe?: string | null
+          sexo?: string | null
+          tratamento?: string | null
+          uf_conselho?: string | null
           updated_at?: string
         }
         Update: {
           ativo?: boolean
           clinica_id?: string
+          conselho?: string | null
+          cpf?: string | null
           created_at?: string
           crm?: string | null
           documento?: string | null
+          documento_conselho?: string | null
+          email?: string | null
           especialidade?: string | null
+          especialidades?: Json | null
           feegow_id?: string | null
           id?: string
+          idade_maxima?: number | null
+          idade_minima?: number | null
           nome?: string
+          rqe?: string | null
+          sexo?: string | null
+          tratamento?: string | null
+          uf_conselho?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -5013,34 +5061,115 @@ export type Database = {
       }
       pacientes: {
         Row: {
+          bairro: string | null
+          carteirinha: string | null
+          celular: string | null
+          cep: string | null
+          cidade: string | null
           clinica_id: string
+          complemento: string | null
+          convenio_id: string | null
+          cpf: string | null
           created_at: string
           data_cadastro: string | null
+          data_nascimento: string | null
+          data_retencao: string | null
+          email: string | null
+          endereco: string | null
+          estado: string | null
+          feegow_alterado_em: string | null
+          feegow_criado_em: string | null
           feegow_id: string | null
           id: string
+          indicado_por: string | null
           nome: string
+          nome_social: string | null
+          numero: string | null
+          observacoes: string | null
+          plano: string | null
           primeira_consulta: string | null
+          profissao: string | null
+          rg: string | null
+          sexo: string | null
+          status: string | null
+          telefone: string | null
+          titular: string | null
           updated_at: string
+          validade_carteirinha: string | null
         }
         Insert: {
+          bairro?: string | null
+          carteirinha?: string | null
+          celular?: string | null
+          cep?: string | null
+          cidade?: string | null
           clinica_id: string
+          complemento?: string | null
+          convenio_id?: string | null
+          cpf?: string | null
           created_at?: string
           data_cadastro?: string | null
+          data_nascimento?: string | null
+          data_retencao?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          feegow_alterado_em?: string | null
+          feegow_criado_em?: string | null
           feegow_id?: string | null
           id?: string
+          indicado_por?: string | null
           nome: string
+          nome_social?: string | null
+          numero?: string | null
+          observacoes?: string | null
+          plano?: string | null
           primeira_consulta?: string | null
+          profissao?: string | null
+          rg?: string | null
+          sexo?: string | null
+          status?: string | null
+          telefone?: string | null
+          titular?: string | null
           updated_at?: string
+          validade_carteirinha?: string | null
         }
         Update: {
+          bairro?: string | null
+          carteirinha?: string | null
+          celular?: string | null
+          cep?: string | null
+          cidade?: string | null
           clinica_id?: string
+          complemento?: string | null
+          convenio_id?: string | null
+          cpf?: string | null
           created_at?: string
           data_cadastro?: string | null
+          data_nascimento?: string | null
+          data_retencao?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          feegow_alterado_em?: string | null
+          feegow_criado_em?: string | null
           feegow_id?: string | null
           id?: string
+          indicado_por?: string | null
           nome?: string
+          nome_social?: string | null
+          numero?: string | null
+          observacoes?: string | null
+          plano?: string | null
           primeira_consulta?: string | null
+          profissao?: string | null
+          rg?: string | null
+          sexo?: string | null
+          status?: string | null
+          telefone?: string | null
+          titular?: string | null
           updated_at?: string
+          validade_carteirinha?: string | null
         }
         Relationships: [
           {
@@ -5048,6 +5177,13 @@ export type Database = {
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pacientes_convenio_id_fkey"
+            columns: ["convenio_id"]
+            isOneToOne: false
+            referencedRelation: "convenios"
             referencedColumns: ["id"]
           },
         ]
@@ -5689,34 +5825,52 @@ export type Database = {
           ativo: boolean
           clinica_id: string
           codigo_feegow: string | null
+          codigo_tiss: string | null
           created_at: string
           especialidade: string | null
+          especialidade_ids: Json | null
+          feegow_id: string | null
           id: string
           nome: string
+          tempo_minutos: number | null
           tipo: Database["public"]["Enums"]["tipo_procedimento"]
+          tipo_procedimento: string | null
           updated_at: string
+          valor_particular: number | null
         }
         Insert: {
           ativo?: boolean
           clinica_id: string
           codigo_feegow?: string | null
+          codigo_tiss?: string | null
           created_at?: string
           especialidade?: string | null
+          especialidade_ids?: Json | null
+          feegow_id?: string | null
           id?: string
           nome: string
+          tempo_minutos?: number | null
           tipo?: Database["public"]["Enums"]["tipo_procedimento"]
+          tipo_procedimento?: string | null
           updated_at?: string
+          valor_particular?: number | null
         }
         Update: {
           ativo?: boolean
           clinica_id?: string
           codigo_feegow?: string | null
+          codigo_tiss?: string | null
           created_at?: string
           especialidade?: string | null
+          especialidade_ids?: Json | null
+          feegow_id?: string | null
           id?: string
           nome?: string
+          tempo_minutos?: number | null
           tipo?: Database["public"]["Enums"]["tipo_procedimento"]
+          tipo_procedimento?: string | null
           updated_at?: string
+          valor_particular?: number | null
         }
         Relationships: [
           {
@@ -7311,6 +7465,7 @@ export type Database = {
           corpo: string
           created_at: string | null
           id: string
+          mensagem: string | null
           nome: string
           variaveis: Json | null
         }
@@ -7321,6 +7476,7 @@ export type Database = {
           corpo: string
           created_at?: string | null
           id?: string
+          mensagem?: string | null
           nome: string
           variaveis?: Json | null
         }
@@ -7331,6 +7487,7 @@ export type Database = {
           corpo?: string
           created_at?: string | null
           id?: string
+          mensagem?: string | null
           nome?: string
           variaveis?: Json | null
         }
@@ -7353,7 +7510,10 @@ export type Database = {
           clinica_id: string | null
           created_at: string | null
           id: string | null
+          resultado_teste: string | null
           servico: string | null
+          status: string | null
+          ultimo_teste: string | null
           updated_at: string | null
         }
         Insert: {
@@ -7362,7 +7522,10 @@ export type Database = {
           clinica_id?: string | null
           created_at?: string | null
           id?: string | null
+          resultado_teste?: string | null
           servico?: string | null
+          status?: string | null
+          ultimo_teste?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -7371,7 +7534,10 @@ export type Database = {
           clinica_id?: string | null
           created_at?: string | null
           id?: string | null
+          resultado_teste?: string | null
           servico?: string | null
+          status?: string | null
+          ultimo_teste?: string | null
           updated_at?: string | null
         }
         Relationships: [
