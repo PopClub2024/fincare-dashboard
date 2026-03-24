@@ -87,7 +87,7 @@ export default function WhatsApp() {
     queryKey: ["whatsapp-conversas", clinicaId, filtroAtendimento, filtroPipeline],
     queryFn: async () => {
       if (!clinicaId) return [];
-      let q = supabase.from("whatsapp_conversas").select("*").eq("clinica_id", clinicaId).eq("arquivada", false).order("ultima_mensagem_em", { ascending: false });
+      let q = supabase.from("whatsapp_conversas").select("*").eq("clinica_id", clinicaId).order("ultima_mensagem_em", { ascending: false }) as any;
       if (filtroAtendimento !== "todos") q = q.eq("atendimento", filtroAtendimento);
       if (filtroPipeline !== "todos") q = q.eq("pipeline_etapa", filtroPipeline);
       const { data } = await q;
