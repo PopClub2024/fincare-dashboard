@@ -427,7 +427,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
             </span>
           );
         }
-        return <span style={{ color: "#CCC" }}>—</span>;
+        return <span className="text-muted-foreground/50">—</span>;
       },
     },
     {
@@ -435,7 +435,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       header: "Vencimento",
       width: "12%",
       render: (l: Lancamento) => {
-        if (!l.data_vencimento) return <span style={{ color: "#CCC" }}>—</span>;
+        if (!l.data_vencimento) return <span className="text-muted-foreground/50">—</span>;
         const style = vencimentoStyle(l.data_vencimento);
         return (
           <span className="text-[13px]" style={style}>
