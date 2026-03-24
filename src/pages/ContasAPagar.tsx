@@ -714,10 +714,10 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                   onChange={(e) => setForm({ ...form, data_competencia: e.target.value })}
                 />
               </div>
-              <div className="flex items-center justify-between rounded-lg border px-3 py-2" style={{ borderColor: "#E5E5E5" }}>
+              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                 <div>
-                  <p className="text-[13px] font-medium" style={{ color: "#2C3E50" }}>Recorrente</p>
-                  <p className="text-[11px]" style={{ color: "#666" }}>Lançamento mensal automático</p>
+                  <p className="text-[13px] font-medium text-foreground">Recorrente</p>
+                  <p className="text-[11px] text-muted-foreground">Lançamento mensal automático</p>
                 </div>
                 <Switch
                   checked={form.recorrente}
