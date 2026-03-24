@@ -393,11 +393,11 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       width: "24%",
       render: (l: Lancamento) => (
         <div>
-          <p className="font-semibold text-[13px] truncate max-w-[220px]" style={{ color: "#2C3E50" }}>
+          <p className="font-semibold text-[13px] truncate max-w-[220px] text-foreground">
             {l.fornecedor || l.descricao || "—"}
           </p>
           {l.fornecedor && l.descricao && (
-            <p className="text-[11px] truncate max-w-[220px]" style={{ color: "#666" }}>{l.descricao}</p>
+            <p className="text-[11px] truncate max-w-[220px] text-muted-foreground">{l.descricao}</p>
           )}
         </div>
       ),
