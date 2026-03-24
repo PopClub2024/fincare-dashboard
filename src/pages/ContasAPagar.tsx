@@ -393,11 +393,11 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       width: "24%",
       render: (l: Lancamento) => (
         <div>
-          <p className="font-semibold text-[13px] truncate max-w-[220px]" style={{ color: "#2C3E50" }}>
+          <p className="font-semibold text-[13px] truncate max-w-[220px] text-foreground">
             {l.fornecedor || l.descricao || "—"}
           </p>
           {l.fornecedor && l.descricao && (
-            <p className="text-[11px] truncate max-w-[220px]" style={{ color: "#666" }}>{l.descricao}</p>
+            <p className="text-[11px] truncate max-w-[220px] text-muted-foreground">{l.descricao}</p>
           )}
         </div>
       ),
@@ -422,12 +422,12 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
         }
         if (l.plano_contas) {
           return (
-            <span className="text-[12px]" style={{ color: "#666" }}>
+            <span className="text-[12px] text-muted-foreground">
               {l.plano_contas.codigo_estruturado}
             </span>
           );
         }
-        return <span style={{ color: "#CCC" }}>—</span>;
+        return <span className="text-muted-foreground/50">—</span>;
       },
     },
     {
@@ -435,7 +435,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       header: "Vencimento",
       width: "12%",
       render: (l: Lancamento) => {
-        if (!l.data_vencimento) return <span style={{ color: "#CCC" }}>—</span>;
+        if (!l.data_vencimento) return <span className="text-muted-foreground/50">—</span>;
         const style = vencimentoStyle(l.data_vencimento);
         return (
           <span className="text-[13px]" style={style}>
@@ -450,7 +450,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       width: "12%",
       align: "right" as const,
       render: (l: Lancamento) => (
-        <span className="text-[13px]" style={{ fontWeight: 500, color: "#2C3E50" }}>
+        <span className="text-[13px] font-medium text-foreground">
           {formatCurrency(l.valor)}
         </span>
       ),
@@ -461,11 +461,11 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       width: "11%",
       align: "right" as const,
       render: (l: Lancamento) => {
-        if (!l.valor_pago && l.status !== "pago") return <span style={{ color: "#CCC" }}>—</span>;
+        if (!l.valor_pago && l.status !== "pago") return <span className="text-muted-foreground/50">—</span>;
         const vp = l.valor_pago ?? l.valor;
         const isPartial = vp < l.valor;
         return (
-          <span className="text-[13px]" style={{ color: isPartial ? "#BA7517" : "#1D9E75", fontWeight: 500 }}>
+          <span className={`text-[13px] font-medium ${isPartial ? "text-warning" : "text-success"}`}>
             {formatCurrency(vp)}
           </span>
         );
@@ -477,7 +477,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       width: "11%",
       render: (l: Lancamento) => l.forma_pagamento
         ? <StatusBadge status={l.forma_pagamento} type="pagamento" />
-        : <span style={{ color: "#CCC" }}>—</span>,
+        : <span className="text-muted-foreground/50">—</span>,
     },
     {
       key: "status",
@@ -561,8 +561,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
           <>
             <Label
               htmlFor="comp-upload-lc"
-              className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed px-3 py-1.5 text-[13px] transition-colors hover:bg-muted"
-              style={{ borderColor: "#E5E5E5", color: "#666" }}
+              className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted"
             >
               <Upload className="h-3.5 w-3.5" />
               {uploading ? "Processando..." : "Comprovante IA"}
@@ -593,7 +592,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle style={{ color: "#2C3E50" }}>Nova Conta a Pagar</DialogTitle>
+            <DialogTitle className="text-foreground">Nova Conta a Pagar</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 pt-1">
             {/* Fornecedor CNPJ */}
@@ -670,12 +669,11 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                     key={op.key}
                     type="button"
                     onClick={() => setForm({ ...form, forma_pagamento: op.key })}
-                    className="rounded-full px-3 py-1 text-[12px] font-medium transition-all border"
-                    style={
+                    className={`rounded-full px-3 py-1 text-[12px] font-medium transition-all border ${
                       form.forma_pagamento === op.key
-                        ? { background: "#1B5E7B", color: "white", borderColor: "#1B5E7B" }
-                        : { background: "white", color: "#666", borderColor: "#E5E5E5" }
-                    }
+                        ? "bg-secondary text-secondary-foreground border-secondary"
+                        : "bg-card text-muted-foreground border-border"
+                    }`}
                   >
                     {op.label}
                   </button>
@@ -714,10 +712,10 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                   onChange={(e) => setForm({ ...form, data_competencia: e.target.value })}
                 />
               </div>
-              <div className="flex items-center justify-between rounded-lg border px-3 py-2" style={{ borderColor: "#E5E5E5" }}>
+              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                 <div>
-                  <p className="text-[13px] font-medium" style={{ color: "#2C3E50" }}>Recorrente</p>
-                  <p className="text-[11px]" style={{ color: "#666" }}>Lançamento mensal automático</p>
+                  <p className="text-[13px] font-medium text-foreground">Recorrente</p>
+                  <p className="text-[11px] text-muted-foreground">Lançamento mensal automático</p>
                 </div>
                 <Switch
                   checked={form.recorrente}
@@ -739,7 +737,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
               <Button variant="outline" onClick={() => setShowDialog(false)}>Cancelar</Button>
               <Button
                 onClick={handleCreate}
-                style={{ background: "#1B5E7B", color: "white" }}
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
               >
                 Criar Conta
               </Button>
@@ -752,15 +750,15 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       <Dialog open={showBaixaDialog} onOpenChange={setShowBaixaDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle style={{ color: "#2C3E50" }}>Dar Baixa</DialogTitle>
+            <DialogTitle className="text-foreground">Dar Baixa</DialogTitle>
           </DialogHeader>
           {baixaTarget && (
             <div className="space-y-4 pt-1">
-              <div className="rounded-lg p-3" style={{ background: "#F5F5F5" }}>
-                <p className="text-[13px] font-semibold" style={{ color: "#2C3E50" }}>
+              <div className="rounded-lg p-3 bg-muted">
+                <p className="text-[13px] font-semibold text-foreground">
                   {baixaTarget.fornecedor || baixaTarget.descricao}
                 </p>
-                <p className="text-[12px] mt-0.5" style={{ color: "#666" }}>
+                <p className="text-[12px] mt-0.5 text-muted-foreground">
                   Valor original: <strong>{formatCurrency(baixaTarget.valor)}</strong>
                 </p>
               </div>
@@ -838,7 +836,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                 <Button
                   onClick={handleBaixa}
                   disabled={savingBaixa}
-                  style={{ background: "#1D9E75", color: "white" }}
+                  className="bg-success text-success-foreground hover:bg-success/90"
                 >
                   {savingBaixa ? "Salvando..." : "Confirmar baixa"}
                 </Button>
@@ -964,8 +962,7 @@ function TabComprovantes() {
       render: (c: Comprovante) => (
         <button
           onClick={() => setPreviewUrl(c.arquivo_url)}
-          className="flex items-center gap-2 text-[13px] hover:underline"
-          style={{ color: "#1B5E7B" }}
+          className="flex items-center gap-2 text-[13px] hover:underline text-secondary"
         >
           <FileText className="h-4 w-4 flex-shrink-0" />
           <span className="truncate max-w-[160px]">{c.arquivo_nome || "comprovante"}</span>
@@ -997,7 +994,7 @@ function TabComprovantes() {
       render: (c: Comprovante) => {
         const ext = c.dados_extraidos || {};
         return (
-          <span className="text-[13px]" style={{ fontWeight: 500 }}>
+          <span className="text-[13px] font-medium">
             {ext.valor ? formatCurrency(ext.valor) : "—"}
           </span>
         );
@@ -1019,7 +1016,7 @@ function TabComprovantes() {
       render: (c: Comprovante) => {
         const ext = c.dados_extraidos || {};
         return (
-          <span className="text-[12px]" style={{ color: "#666" }}>
+          <span className="text-[12px] text-muted-foreground">
             {ext.plano_contas_codigo_estruturado
               ? `${ext.plano_contas_codigo_estruturado} – ${ext.descricao || ""}`
               : "—"}
@@ -1089,8 +1086,7 @@ function TabComprovantes() {
           <>
             <Label
               htmlFor="comp-multi-upload"
-              className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold text-white transition-colors"
-              style={{ background: "#1B5E7B" }}
+              className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold bg-secondary text-secondary-foreground transition-colors hover:bg-secondary/90"
             >
               <Upload className="h-4 w-4" />
               {uploading ? "Processando..." : "Enviar Comprovantes"}
@@ -1111,21 +1107,20 @@ function TabComprovantes() {
       {/* Info pipeline cards */}
       <div className="grid gap-3 sm:grid-cols-3">
         {[
-          { icon: <Upload className="h-5 w-5" style={{ color: "#1B5E7B" }} />, step: "1. Upload", desc: "Envie foto ou PDF do comprovante", bg: "rgba(27,94,123,0.08)" },
-          { icon: <AlertCircle className="h-5 w-5" style={{ color: "#BA7517" }} />, step: "2. IA Extrai", desc: "Campos extraídos automaticamente", bg: "rgba(186,117,23,0.08)" },
-          { icon: <CheckCircle2 className="h-5 w-5" style={{ color: "#1D9E75" }} />, step: "3. Lançamento", desc: "Criado e classificado automaticamente", bg: "rgba(29,158,117,0.08)" },
+          { icon: <Upload className="h-5 w-5 text-secondary" />, step: "1. Upload", desc: "Envie foto ou PDF do comprovante", bg: "bg-secondary/10" },
+          { icon: <AlertCircle className="h-5 w-5 text-warning" />, step: "2. IA Extrai", desc: "Campos extraídos automaticamente", bg: "bg-warning/10" },
+          { icon: <CheckCircle2 className="h-5 w-5 text-success" />, step: "3. Lançamento", desc: "Criado e classificado automaticamente", bg: "bg-success/10" },
         ].map((item) => (
           <div
             key={item.step}
-            className="flex items-start gap-3 rounded-xl p-4"
-            style={{ background: "#F5F5F5", border: "0.5px solid #E5E5E5" }}
+            className="flex items-start gap-3 rounded-xl p-4 bg-muted border border-border"
           >
-            <div className="rounded-lg p-2" style={{ background: item.bg }}>
+            <div className={`rounded-lg p-2 ${item.bg}`}>
               {item.icon}
             </div>
             <div>
-              <p className="font-semibold text-[13px]" style={{ color: "#2C3E50" }}>{item.step}</p>
-              <p className="text-[12px] mt-0.5" style={{ color: "#666" }}>{item.desc}</p>
+              <p className="font-semibold text-[13px] text-foreground">{item.step}</p>
+              <p className="text-[12px] mt-0.5 text-muted-foreground">{item.desc}</p>
             </div>
           </div>
         ))}
@@ -1133,7 +1128,7 @@ function TabComprovantes() {
 
       {/* Search */}
       <div className="relative max-w-xs">
-        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5" style={{ color: "#666" }} />
+        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
         <Input
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
