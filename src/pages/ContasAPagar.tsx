@@ -461,11 +461,11 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       width: "11%",
       align: "right" as const,
       render: (l: Lancamento) => {
-        if (!l.valor_pago && l.status !== "pago") return <span style={{ color: "#CCC" }}>—</span>;
+        if (!l.valor_pago && l.status !== "pago") return <span className="text-muted-foreground/50">—</span>;
         const vp = l.valor_pago ?? l.valor;
         const isPartial = vp < l.valor;
         return (
-          <span className="text-[13px]" style={{ color: isPartial ? "#BA7517" : "#1D9E75", fontWeight: 500 }}>
+          <span className={`text-[13px] font-medium ${isPartial ? "text-warning" : "text-success"}`}>
             {formatCurrency(vp)}
           </span>
         );
