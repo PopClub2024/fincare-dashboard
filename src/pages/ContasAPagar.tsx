@@ -752,15 +752,15 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       <Dialog open={showBaixaDialog} onOpenChange={setShowBaixaDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle style={{ color: "#2C3E50" }}>Dar Baixa</DialogTitle>
+            <DialogTitle className="text-foreground">Dar Baixa</DialogTitle>
           </DialogHeader>
           {baixaTarget && (
             <div className="space-y-4 pt-1">
-              <div className="rounded-lg p-3" style={{ background: "#F5F5F5" }}>
-                <p className="text-[13px] font-semibold" style={{ color: "#2C3E50" }}>
+              <div className="rounded-lg p-3 bg-muted">
+                <p className="text-[13px] font-semibold text-foreground">
                   {baixaTarget.fornecedor || baixaTarget.descricao}
                 </p>
-                <p className="text-[12px] mt-0.5" style={{ color: "#666" }}>
+                <p className="text-[12px] mt-0.5 text-muted-foreground">
                   Valor original: <strong>{formatCurrency(baixaTarget.valor)}</strong>
                 </p>
               </div>
