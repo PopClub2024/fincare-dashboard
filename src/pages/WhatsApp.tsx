@@ -136,7 +136,7 @@ export default function WhatsApp() {
     queryKey: ["fila-humana", clinicaId],
     queryFn: async () => {
       if (!clinicaId) return [];
-      const { data } = await supabase.from("whatsapp_fila_humano").select("*, whatsapp_conversas(nome_contato, telefone, tags)").eq("clinica_id", clinicaId).eq("status", "aguardando").order("prioridade").order("entrou_fila_em");
+      const { data } = await (supabase.from("whatsapp_fila_humano").select("*, whatsapp_conversas(nome_contato, telefone, tags)").eq("clinica_id", clinicaId).eq("status", "aguardando").order("prioridade").order("created_at") as any);
       return data || [];
     },
     enabled: !!clinicaId,
