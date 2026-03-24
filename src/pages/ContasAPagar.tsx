@@ -739,7 +739,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
               <Button variant="outline" onClick={() => setShowDialog(false)}>Cancelar</Button>
               <Button
                 onClick={handleCreate}
-                style={{ background: "#1B5E7B", color: "white" }}
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
               >
                 Criar Conta
               </Button>
