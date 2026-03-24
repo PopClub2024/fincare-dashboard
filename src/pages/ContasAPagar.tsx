@@ -450,7 +450,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       width: "12%",
       align: "right" as const,
       render: (l: Lancamento) => (
-        <span className="text-[13px]" style={{ fontWeight: 500, color: "#2C3E50" }}>
+        <span className="text-[13px] font-medium text-foreground">
           {formatCurrency(l.valor)}
         </span>
       ),
