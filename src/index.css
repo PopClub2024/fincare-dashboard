@@ -110,3 +110,20 @@
     font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   }
 }
+
+/* Sidebar custom scrollbar */
+@layer utilities {
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background: hsl(204 40% 25%);
+    border-radius: 9999px;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(204 40% 35%);
+  }
+}
