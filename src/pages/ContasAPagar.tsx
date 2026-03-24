@@ -1016,7 +1016,7 @@ function TabComprovantes() {
       render: (c: Comprovante) => {
         const ext = c.dados_extraidos || {};
         return (
-          <span className="text-[12px]" style={{ color: "#666" }}>
+          <span className="text-[12px] text-muted-foreground">
             {ext.plano_contas_codigo_estruturado
               ? `${ext.plano_contas_codigo_estruturado} – ${ext.descricao || ""}`
               : "—"}
