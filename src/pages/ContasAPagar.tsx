@@ -477,7 +477,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       width: "11%",
       render: (l: Lancamento) => l.forma_pagamento
         ? <StatusBadge status={l.forma_pagamento} type="pagamento" />
-        : <span style={{ color: "#CCC" }}>—</span>,
+        : <span className="text-muted-foreground/50">—</span>,
     },
     {
       key: "status",
