@@ -1086,8 +1086,7 @@ function TabComprovantes() {
           <>
             <Label
               htmlFor="comp-multi-upload"
-              className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold text-white transition-colors"
-              style={{ background: "#1B5E7B" }}
+              className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold bg-secondary text-secondary-foreground transition-colors hover:bg-secondary/90"
             >
               <Upload className="h-4 w-4" />
               {uploading ? "Processando..." : "Enviar Comprovantes"}
