@@ -593,7 +593,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle style={{ color: "#2C3E50" }}>Nova Conta a Pagar</DialogTitle>
+            <DialogTitle className="text-foreground">Nova Conta a Pagar</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 pt-1">
             {/* Fornecedor CNPJ */}
