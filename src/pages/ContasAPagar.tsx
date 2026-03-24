@@ -1107,21 +1107,20 @@ function TabComprovantes() {
       {/* Info pipeline cards */}
       <div className="grid gap-3 sm:grid-cols-3">
         {[
-          { icon: <Upload className="h-5 w-5" style={{ color: "#1B5E7B" }} />, step: "1. Upload", desc: "Envie foto ou PDF do comprovante", bg: "rgba(27,94,123,0.08)" },
-          { icon: <AlertCircle className="h-5 w-5" style={{ color: "#BA7517" }} />, step: "2. IA Extrai", desc: "Campos extraídos automaticamente", bg: "rgba(186,117,23,0.08)" },
-          { icon: <CheckCircle2 className="h-5 w-5" style={{ color: "#1D9E75" }} />, step: "3. Lançamento", desc: "Criado e classificado automaticamente", bg: "rgba(29,158,117,0.08)" },
+          { icon: <Upload className="h-5 w-5 text-secondary" />, step: "1. Upload", desc: "Envie foto ou PDF do comprovante", bg: "bg-secondary/10" },
+          { icon: <AlertCircle className="h-5 w-5 text-warning" />, step: "2. IA Extrai", desc: "Campos extraídos automaticamente", bg: "bg-warning/10" },
+          { icon: <CheckCircle2 className="h-5 w-5 text-success" />, step: "3. Lançamento", desc: "Criado e classificado automaticamente", bg: "bg-success/10" },
         ].map((item) => (
           <div
             key={item.step}
-            className="flex items-start gap-3 rounded-xl p-4"
-            style={{ background: "#F5F5F5", border: "0.5px solid #E5E5E5" }}
+            className="flex items-start gap-3 rounded-xl p-4 bg-muted border border-border"
           >
-            <div className="rounded-lg p-2" style={{ background: item.bg }}>
+            <div className={`rounded-lg p-2 ${item.bg}`}>
               {item.icon}
             </div>
             <div>
-              <p className="font-semibold text-[13px]" style={{ color: "#2C3E50" }}>{item.step}</p>
-              <p className="text-[12px] mt-0.5" style={{ color: "#666" }}>{item.desc}</p>
+              <p className="font-semibold text-[13px] text-foreground">{item.step}</p>
+              <p className="text-[12px] mt-0.5 text-muted-foreground">{item.desc}</p>
             </div>
           </div>
         ))}
