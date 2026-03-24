@@ -669,7 +669,6 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                     key={op.key}
                     type="button"
                     onClick={() => setForm({ ...form, forma_pagamento: op.key })}
-                    className="rounded-full px-3 py-1 text-[12px] font-medium transition-all border"
                     className={`rounded-full px-3 py-1 text-[12px] font-medium transition-all border ${
                       form.forma_pagamento === op.key
                         ? "bg-secondary text-secondary-foreground border-secondary"
