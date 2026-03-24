@@ -14,6 +14,9 @@ import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 
+// Recepção (home)
+import Recepcao from "./pages/Recepcao";
+
 // Financeiro
 import DashboardCFO from "./pages/DashboardCFO";
 import CfoAssistente from "./pages/CfoAssistente";
@@ -84,11 +87,14 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<Navigate to="/recepcao" replace />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/onboarding" element={<Onboarding />} />
+
+            {/* Recepção (Home) */}
+            <Route path="/recepcao" element={<P><Recepcao /></P>} />
 
             {/* Visão Geral */}
             <Route path="/dashboard" element={<P><DashboardCFO /></P>} />

@@ -15,7 +15,7 @@ import {
   LayoutDashboard, Receipt, FileText, ArrowDownCircle, ArrowUpCircle,
   Settings, LogOut, Menu, X, FileBarChart, Wallet, Landmark,
   Tag, Building2, GitCompare, Plug, ChevronRight, ChevronDown, Zap, Inbox,
-  HeartHandshake,
+  HeartHandshake, Home,
   Users, Calendar, CheckCircle, Clock, Stethoscope,
   MessageSquare, Package, Star, BookOpen, FileSignature,
   UserRound, Bot, Megaphone,
@@ -32,8 +32,9 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    title: "Visao Geral",
+    title: "Inicio",
     items: [
+      { label: "Recepcao", icon: Home, path: "/recepcao" },
       { label: "Dashboard CFO", icon: LayoutDashboard, path: "/dashboard" },
       { label: "CFO Assistente", icon: Bot, path: "/cfo-assistente" },
     ],
