@@ -422,7 +422,7 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
         }
         if (l.plano_contas) {
           return (
-            <span className="text-[12px]" style={{ color: "#666" }}>
+            <span className="text-[12px] text-muted-foreground">
               {l.plano_contas.codigo_estruturado}
             </span>
           );
