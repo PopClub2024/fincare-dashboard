@@ -16,7 +16,7 @@ export default function TVRecepcao() {
         .from("chamadas_paciente")
         .select("*")
         .eq("clinica_id", clinicaId)
-        .eq("exibido", false)
+        .eq("status", "chamando")
         .order("chamado_em", { ascending: false })
         .limit(1);
       return data || [];

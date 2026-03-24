@@ -507,7 +507,7 @@ export default function WhatsApp() {
                           className="min-h-[36px] max-h-[80px] text-sm resize-none"
                           rows={1}
                         />
-                        <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => enviarMsg.mutate()} disabled={!msgTexto.trim()}>
+                        <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => enviarMsg.mutate({})} disabled={!msgTexto.trim()}>
                           <Send className="h-4 w-4" />
                         </Button>
                       </div>

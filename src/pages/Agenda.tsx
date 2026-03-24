@@ -282,11 +282,11 @@ export default function Agenda() {
 
         {/* ── KPI Cards ── */}
         <KpiCards
-          cards={[
-            { label: "Agendamentos hoje", value: totalDia, icon: "calendar" },
-            { label: "Confirmados / Check-in", value: confirmados, color: "green" },
-            { label: "Atendidos", value: atendidos, color: "green" },
-            { label: "Cancelados / Faltou", value: canceladosDia, color: "red" },
+          items={[
+            { label: "Agendamentos hoje", value: totalDia, isCurrency: false },
+            { label: "Confirmados / Check-in", value: confirmados, isCurrency: false },
+            { label: "Atendidos", value: atendidos, isCurrency: false },
+            { label: "Cancelados / Faltou", value: canceladosDia, isCurrency: false },
           ]}
         />
 
