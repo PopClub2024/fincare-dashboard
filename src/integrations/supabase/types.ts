@@ -1006,6 +1006,113 @@ export type Database = {
         }
         Relationships: []
       }
+      colaborador_documentos: {
+        Row: {
+          arquivo_url: string | null
+          clinica_id: string
+          colaborador_id: string | null
+          created_at: string | null
+          id: string
+          nome: string
+          tipo: string | null
+        }
+        Insert: {
+          arquivo_url?: string | null
+          clinica_id: string
+          colaborador_id?: string | null
+          created_at?: string | null
+          id?: string
+          nome: string
+          tipo?: string | null
+        }
+        Update: {
+          arquivo_url?: string | null
+          clinica_id?: string
+          colaborador_id?: string | null
+          created_at?: string | null
+          id?: string
+          nome?: string
+          tipo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "colaborador_documentos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "colaborador_documentos_colaborador_id_fkey"
+            columns: ["colaborador_id"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      colaboradores: {
+        Row: {
+          ativo: boolean | null
+          cargo: string | null
+          clinica_id: string
+          cpf: string | null
+          created_at: string | null
+          data_admissao: string | null
+          data_demissao: string | null
+          departamento: string | null
+          email: string | null
+          id: string
+          nome: string
+          salario: number | null
+          telefone: string | null
+          tipo_contrato: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          cargo?: string | null
+          clinica_id: string
+          cpf?: string | null
+          created_at?: string | null
+          data_admissao?: string | null
+          data_demissao?: string | null
+          departamento?: string | null
+          email?: string | null
+          id?: string
+          nome: string
+          salario?: number | null
+          telefone?: string | null
+          tipo_contrato?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          cargo?: string | null
+          clinica_id?: string
+          cpf?: string | null
+          created_at?: string | null
+          data_admissao?: string | null
+          data_demissao?: string | null
+          departamento?: string | null
+          email?: string | null
+          id?: string
+          nome?: string
+          salario?: number | null
+          telefone?: string | null
+          tipo_contrato?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "colaboradores_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comprovantes: {
         Row: {
           arquivo_hash: string | null
@@ -1787,6 +1894,51 @@ export type Database = {
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contrato_documentos: {
+        Row: {
+          arquivo_url: string | null
+          clinica_id: string
+          contrato_id: string | null
+          created_at: string | null
+          id: string
+          nome: string
+          tipo: string | null
+        }
+        Insert: {
+          arquivo_url?: string | null
+          clinica_id: string
+          contrato_id?: string | null
+          created_at?: string | null
+          id?: string
+          nome: string
+          tipo?: string | null
+        }
+        Update: {
+          arquivo_url?: string | null
+          clinica_id?: string
+          contrato_id?: string | null
+          created_at?: string | null
+          id?: string
+          nome?: string
+          tipo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contrato_documentos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contrato_documentos_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "contratos_prestadores"
             referencedColumns: ["id"]
           },
         ]
@@ -4450,6 +4602,13 @@ export type Database = {
             foreignKeyName: "marketing_criativos_campanha_id_fkey"
             columns: ["campanha_id"]
             isOneToOne: false
+            referencedRelation: "campanhas_marketing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_criativos_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
             referencedRelation: "marketing_campanhas"
             referencedColumns: ["id"]
           },
@@ -4547,6 +4706,13 @@ export type Database = {
           telefone?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "marketing_leads_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas_marketing"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "marketing_leads_campanha_id_fkey"
             columns: ["campanha_id"]
@@ -4708,6 +4874,61 @@ export type Database = {
           },
           {
             foreignKeyName: "nps_pesquisas_paciente_id_fkey"
+            columns: ["paciente_id"]
+            isOneToOne: false
+            referencedRelation: "pacientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nps_respostas: {
+        Row: {
+          canal: string | null
+          clinica_id: string
+          comentario: string | null
+          created_at: string | null
+          id: string
+          medico_id: string | null
+          nota: number | null
+          paciente_id: string | null
+        }
+        Insert: {
+          canal?: string | null
+          clinica_id: string
+          comentario?: string | null
+          created_at?: string | null
+          id?: string
+          medico_id?: string | null
+          nota?: number | null
+          paciente_id?: string | null
+        }
+        Update: {
+          canal?: string | null
+          clinica_id?: string
+          comentario?: string | null
+          created_at?: string | null
+          id?: string
+          medico_id?: string | null
+          nota?: number | null
+          paciente_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nps_respostas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nps_respostas_medico_id_fkey"
+            columns: ["medico_id"]
+            isOneToOne: false
+            referencedRelation: "medicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nps_respostas_paciente_id_fkey"
             columns: ["paciente_id"]
             isOneToOne: false
             referencedRelation: "pacientes"
@@ -4956,6 +5177,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "permissoes_modulo_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pessoas: {
+        Row: {
+          ativo: boolean | null
+          clinica_id: string
+          cpf_cnpj: string | null
+          created_at: string | null
+          email: string | null
+          endereco: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          telefone: string | null
+          tipo: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          clinica_id: string
+          cpf_cnpj?: string | null
+          created_at?: string | null
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          telefone?: string | null
+          tipo?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          clinica_id?: string
+          cpf_cnpj?: string | null
+          created_at?: string | null
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          telefone?: string | null
+          tipo?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pessoas_clinica_id_fkey"
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
@@ -6686,6 +6960,349 @@ export type Database = {
           },
         ]
       }
+      whatsapp_campanhas: {
+        Row: {
+          agendado_para: string | null
+          clinica_id: string
+          created_at: string | null
+          destinatarios: Json | null
+          entregues: number | null
+          enviados: number | null
+          id: string
+          lidos: number | null
+          nome: string
+          status: string | null
+          template_id: string | null
+        }
+        Insert: {
+          agendado_para?: string | null
+          clinica_id: string
+          created_at?: string | null
+          destinatarios?: Json | null
+          entregues?: number | null
+          enviados?: number | null
+          id?: string
+          lidos?: number | null
+          nome: string
+          status?: string | null
+          template_id?: string | null
+        }
+        Update: {
+          agendado_para?: string | null
+          clinica_id?: string
+          created_at?: string | null
+          destinatarios?: Json | null
+          entregues?: number | null
+          enviados?: number | null
+          id?: string
+          lidos?: number | null
+          nome?: string
+          status?: string | null
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campanhas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_campanhas_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_conversas: {
+        Row: {
+          atendente_id: string | null
+          clinica_id: string
+          created_at: string | null
+          id: string
+          nome_contato: string | null
+          paciente_id: string | null
+          status: string | null
+          tags: string[] | null
+          telefone: string
+          ultima_mensagem: string | null
+          ultima_mensagem_em: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          atendente_id?: string | null
+          clinica_id: string
+          created_at?: string | null
+          id?: string
+          nome_contato?: string | null
+          paciente_id?: string | null
+          status?: string | null
+          tags?: string[] | null
+          telefone: string
+          ultima_mensagem?: string | null
+          ultima_mensagem_em?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          atendente_id?: string | null
+          clinica_id?: string
+          created_at?: string | null
+          id?: string
+          nome_contato?: string | null
+          paciente_id?: string | null
+          status?: string | null
+          tags?: string[] | null
+          telefone?: string
+          ultima_mensagem?: string | null
+          ultima_mensagem_em?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_conversas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_conversas_paciente_id_fkey"
+            columns: ["paciente_id"]
+            isOneToOne: false
+            referencedRelation: "pacientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_fila_humano: {
+        Row: {
+          atendente_id: string | null
+          atendido_em: string | null
+          clinica_id: string
+          conversa_id: string | null
+          created_at: string | null
+          id: string
+          motivo: string | null
+          prioridade: number | null
+          status: string | null
+        }
+        Insert: {
+          atendente_id?: string | null
+          atendido_em?: string | null
+          clinica_id: string
+          conversa_id?: string | null
+          created_at?: string | null
+          id?: string
+          motivo?: string | null
+          prioridade?: number | null
+          status?: string | null
+        }
+        Update: {
+          atendente_id?: string | null
+          atendido_em?: string | null
+          clinica_id?: string
+          conversa_id?: string | null
+          created_at?: string | null
+          id?: string
+          motivo?: string | null
+          prioridade?: number | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_fila_humano_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_fila_humano_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_mensagens: {
+        Row: {
+          clinica_id: string
+          conteudo: string | null
+          conversa_id: string | null
+          created_at: string | null
+          direcao: string
+          id: string
+          media_url: string | null
+          status: string | null
+          tipo: string | null
+          wamid: string | null
+        }
+        Insert: {
+          clinica_id: string
+          conteudo?: string | null
+          conversa_id?: string | null
+          created_at?: string | null
+          direcao: string
+          id?: string
+          media_url?: string | null
+          status?: string | null
+          tipo?: string | null
+          wamid?: string | null
+        }
+        Update: {
+          clinica_id?: string
+          conteudo?: string | null
+          conversa_id?: string | null
+          created_at?: string | null
+          direcao?: string
+          id?: string
+          media_url?: string | null
+          status?: string | null
+          tipo?: string | null
+          wamid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_mensagens_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_mensagens_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_pipeline_contatos: {
+        Row: {
+          clinica_id: string
+          conversa_id: string | null
+          created_at: string | null
+          etapa: string | null
+          id: string
+          observacoes: string | null
+          procedimento_interesse: string | null
+          updated_at: string | null
+          valor_estimado: number | null
+        }
+        Insert: {
+          clinica_id: string
+          conversa_id?: string | null
+          created_at?: string | null
+          etapa?: string | null
+          id?: string
+          observacoes?: string | null
+          procedimento_interesse?: string | null
+          updated_at?: string | null
+          valor_estimado?: number | null
+        }
+        Update: {
+          clinica_id?: string
+          conversa_id?: string | null
+          created_at?: string | null
+          etapa?: string | null
+          id?: string
+          observacoes?: string | null
+          procedimento_interesse?: string | null
+          updated_at?: string | null
+          valor_estimado?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_pipeline_contatos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_pipeline_contatos_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_respostas_prontas: {
+        Row: {
+          atalho: string | null
+          categoria: string | null
+          clinica_id: string
+          conteudo: string
+          created_at: string | null
+          id: string
+          titulo: string
+        }
+        Insert: {
+          atalho?: string | null
+          categoria?: string | null
+          clinica_id: string
+          conteudo: string
+          created_at?: string | null
+          id?: string
+          titulo: string
+        }
+        Update: {
+          atalho?: string | null
+          categoria?: string | null
+          clinica_id?: string
+          conteudo?: string
+          created_at?: string | null
+          id?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_respostas_prontas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_tags: {
+        Row: {
+          clinica_id: string
+          cor: string | null
+          created_at: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          clinica_id: string
+          cor?: string | null
+          created_at?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          clinica_id?: string
+          cor?: string | null
+          created_at?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_tags_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_templates: {
         Row: {
           aprovado: boolean | null
@@ -6729,7 +7346,249 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      api_keys: {
+        Row: {
+          ativo: boolean | null
+          chave_encriptada: string | null
+          clinica_id: string | null
+          created_at: string | null
+          id: string | null
+          servico: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          chave_encriptada?: string | null
+          clinica_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          servico?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          chave_encriptada?: string | null
+          clinica_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          servico?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chaves_api_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendario_postagens: {
+        Row: {
+          clinica_id: string | null
+          created_at: string | null
+          criativo_id: string | null
+          data_publicacao: string | null
+          descricao: string | null
+          id: string | null
+          plataforma: string | null
+          status: string | null
+          titulo: string | null
+        }
+        Insert: {
+          clinica_id?: string | null
+          created_at?: string | null
+          criativo_id?: string | null
+          data_publicacao?: string | null
+          descricao?: string | null
+          id?: string | null
+          plataforma?: string | null
+          status?: string | null
+          titulo?: string | null
+        }
+        Update: {
+          clinica_id?: string | null
+          created_at?: string | null
+          criativo_id?: string | null
+          data_publicacao?: string | null
+          descricao?: string | null
+          id?: string | null
+          plataforma?: string | null
+          status?: string | null
+          titulo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_calendario_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_calendario_criativo_id_fkey"
+            columns: ["criativo_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_criativos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campanhas_marketing: {
+        Row: {
+          clinica_id: string | null
+          conversoes: number | null
+          created_at: string | null
+          data_fim: string | null
+          data_inicio: string | null
+          gasto_total: number | null
+          id: string | null
+          leads_gerados: number | null
+          nome: string | null
+          orcamento: number | null
+          plataforma: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          clinica_id?: string | null
+          conversoes?: number | null
+          created_at?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          gasto_total?: number | null
+          id?: string | null
+          leads_gerados?: number | null
+          nome?: string | null
+          orcamento?: number | null
+          plataforma?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          clinica_id?: string | null
+          conversoes?: number | null
+          created_at?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          gasto_total?: number | null
+          id?: string | null
+          leads_gerados?: number | null
+          nome?: string | null
+          orcamento?: number | null
+          plataforma?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_campanhas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_documentos: {
+        Row: {
+          arquivo_url: string | null
+          categoria: string | null
+          clinica_id: string | null
+          created_at: string | null
+          id: string | null
+          nome: string | null
+          observacoes: string | null
+          tamanho_bytes: number | null
+          tipo_mime: string | null
+        }
+        Insert: {
+          arquivo_url?: string | null
+          categoria?: string | null
+          clinica_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          nome?: string | null
+          observacoes?: string | null
+          tamanho_bytes?: number | null
+          tipo_mime?: string | null
+        }
+        Update: {
+          arquivo_url?: string | null
+          categoria?: string | null
+          clinica_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          nome?: string | null
+          observacoes?: string | null
+          tamanho_bytes?: number | null
+          tipo_mime?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documentos_upload_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_chat_mensagens: {
+        Row: {
+          clinica_id: string | null
+          conteudo: string | null
+          conversa_id: string | null
+          created_at: string | null
+          direcao: string | null
+          id: string | null
+          media_url: string | null
+          status: string | null
+          tipo: string | null
+          wamid: string | null
+        }
+        Insert: {
+          clinica_id?: string | null
+          conteudo?: string | null
+          conversa_id?: string | null
+          created_at?: string | null
+          direcao?: string | null
+          id?: string | null
+          media_url?: string | null
+          status?: string | null
+          tipo?: string | null
+          wamid?: string | null
+        }
+        Update: {
+          clinica_id?: string | null
+          conteudo?: string | null
+          conversa_id?: string | null
+          created_at?: string | null
+          direcao?: string | null
+          id?: string | null
+          media_url?: string | null
+          status?: string | null
+          tipo?: string | null
+          wamid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_mensagens_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_mensagens_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       get_cash_forecast: {
