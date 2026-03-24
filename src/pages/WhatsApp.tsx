@@ -80,7 +80,7 @@ export default function WhatsApp() {
     },
     enabled: !!clinicaId,
   });
-  const isApiConnected = apiStatus?.status === "ativa";
+  const isApiConnected = (apiStatus as any)?.status === "ativa";
 
   // Conversas
   const { data: conversas = [] } = useQuery({
