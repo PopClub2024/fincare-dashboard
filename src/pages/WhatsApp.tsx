@@ -502,7 +502,7 @@ export default function WhatsApp() {
                         <Textarea
                           value={msgTexto}
                           onChange={(e) => setMsgTexto(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviarMsg.mutate(); } }}
+                          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviarMsg.mutate({}); } }}
                           placeholder="Digite ou use /atalho..."
                           className="min-h-[36px] max-h-[80px] text-sm resize-none"
                           rows={1}
