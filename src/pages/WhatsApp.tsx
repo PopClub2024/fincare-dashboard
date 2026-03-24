@@ -125,7 +125,7 @@ export default function WhatsApp() {
     queryKey: ["respostas-prontas", clinicaId],
     queryFn: async () => {
       if (!clinicaId) return [];
-      const { data } = await supabase.from("whatsapp_respostas_prontas").select("*").eq("clinica_id", clinicaId).eq("ativo", true).order("uso_count", { ascending: false });
+      const { data } = await (supabase.from("whatsapp_respostas_prontas").select("*").eq("clinica_id", clinicaId).order("created_at", { ascending: false }) as any);
       return data || [];
     },
     enabled: !!clinicaId,
