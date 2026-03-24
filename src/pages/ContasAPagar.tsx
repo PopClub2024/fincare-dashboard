@@ -1128,7 +1128,7 @@ function TabComprovantes() {
 
       {/* Search */}
       <div className="relative max-w-xs">
-        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5" style={{ color: "#666" }} />
+        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
         <Input
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
