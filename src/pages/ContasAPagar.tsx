@@ -561,7 +561,6 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
           <>
             <Label
               htmlFor="comp-upload-lc"
-              className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed px-3 py-1.5 text-[13px] transition-colors hover:bg-muted"
               className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted"
             >
               <Upload className="h-3.5 w-3.5" />
