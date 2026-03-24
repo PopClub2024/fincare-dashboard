@@ -72,19 +72,19 @@ export default function Estoque() {
   ];
 
   const columns = [
-    { key: "nome", header: "Item", width: "25%", render: (row: any) => (<div><p className="font-medium text-[13px]" style={{ color: "#2C3E50" }}>{row.nome}</p>{row.fabricante && <p className="text-[11px]" style={{ color: "#666" }}>{row.fabricante}</p>}</div>) },
+    { key: "nome", header: "Item", width: "25%", render: (row: any) => (<div><p className="font-medium text-[13px] text-foreground">{row.nome}</p>{row.fabricante && <p className="text-[11px] text-muted-foreground">{row.fabricante}</p>}</div>) },
     { key: "categoria", header: "Categoria", width: "14%", render: (row: any) => <StatusBadge status={row.categoria} type="centro_custo" label={row.categoria === "asg" ? "ASG" : row.categoria === "medico" ? "Médico" : "Admin"} /> },
     { key: "qtd", header: "Qtd", width: "8%", align: "right" as const, render: (row: any) => {
       const baixo = row.quantidade_atual <= row.quantidade_minima;
-      return <span className="font-medium" style={{ color: baixo ? "#E24B4A" : "#2C3E50" }}>{row.quantidade_atual}</span>;
+      return <span className={`font-medium ${baixo ? "text-destructive" : "text-foreground"}`}>{row.quantidade_atual}</span>;
     }},
-    { key: "min", header: "Mín", width: "8%", align: "right" as const, render: (row: any) => <span style={{ color: "#666" }}>{row.quantidade_minima}</span> },
-    { key: "valor", header: "Valor Unit.", width: "10%", align: "right" as const, render: (row: any) => row.valor_unitario ? <span className="font-medium">R$ {Number(row.valor_unitario).toFixed(2)}</span> : <span style={{ color: "#CCC" }}>—</span> },
-    { key: "lote", header: "Lote", width: "10%", render: (row: any) => <span style={{ color: "#666" }}>{row.lote || "—"}</span> },
+    { key: "min", header: "Mín", width: "8%", align: "right" as const, render: (row: any) => <span className="text-muted-foreground">{row.quantidade_minima}</span> },
+    { key: "valor", header: "Valor Unit.", width: "10%", align: "right" as const, render: (row: any) => row.valor_unitario ? <span className="font-medium">R$ {Number(row.valor_unitario).toFixed(2)}</span> : <span className="text-muted-foreground/50">—</span> },
+    { key: "lote", header: "Lote", width: "10%", render: (row: any) => <span className="text-muted-foreground">{row.lote || "—"}</span> },
     { key: "validade", header: "Validade", width: "12%", render: (row: any) => {
-      if (!row.validade) return <span style={{ color: "#CCC" }}>—</span>;
+      if (!row.validade) return <span className="text-muted-foreground/50">—</span>;
       const dias = differenceInDays(new Date(row.validade), new Date());
-      return <span style={{ color: dias < 0 ? "#E24B4A" : dias <= 30 ? "#BA7517" : "#666", fontWeight: dias <= 30 ? 500 : 400 }}>{format(new Date(row.validade), "dd/MM/yy")}</span>;
+      return <span className={`${dias < 0 ? "text-destructive font-medium" : dias <= 30 ? "text-warning font-medium" : "text-muted-foreground"}`}>{format(new Date(row.validade), "dd/MM/yy")}</span>;
     }},
     { key: "status", header: "Status", width: "13%", align: "center" as const, render: (row: any) => {
       const baixo = row.quantidade_atual <= row.quantidade_minima;
@@ -101,27 +101,27 @@ export default function Estoque() {
         <PageHeader title="Estoque" subtitle="Administrativo, Médico e ASG" actions={
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="h-9 gap-1.5 text-[13px] font-semibold" style={{ background: "#1B5E7B", color: "white" }}>
+              <Button size="sm" className="h-9 gap-1.5 text-[13px] font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90">
                 <Plus className="h-3.5 w-3.5" /> Novo Item
               </Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle style={{ color: "#2C3E50" }}>Cadastrar Item</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle className="text-foreground">Cadastrar Item</DialogTitle></DialogHeader>
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2"><Label className="text-xs" style={{ color: "#666" }}>Nome *</Label><Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
-                <div><Label className="text-xs" style={{ color: "#666" }}>Categoria</Label>
+                <div className="col-span-2"><Label className="text-xs text-muted-foreground">Nome *</Label><Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
+                <div><Label className="text-xs text-muted-foreground">Categoria</Label>
                   <Select value={form.categoria} onValueChange={(v) => setForm({ ...form, categoria: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="administrativo">Administrativo</SelectItem><SelectItem value="medico">Médico</SelectItem><SelectItem value="asg">ASG</SelectItem></SelectContent>
                   </Select></div>
-                <div><Label className="text-xs" style={{ color: "#666" }}>Fabricante</Label><Input value={form.fabricante} onChange={(e) => setForm({ ...form, fabricante: e.target.value })} /></div>
-                <div><Label className="text-xs" style={{ color: "#666" }}>Qtd Atual</Label><Input type="number" value={form.quantidade_atual} onChange={(e) => setForm({ ...form, quantidade_atual: e.target.value })} /></div>
-                <div><Label className="text-xs" style={{ color: "#666" }}>Qtd Mínima</Label><Input type="number" value={form.quantidade_minima} onChange={(e) => setForm({ ...form, quantidade_minima: e.target.value })} /></div>
-                <div><Label className="text-xs" style={{ color: "#666" }}>Valor Unit.</Label><Input type="number" step="0.01" value={form.valor_unitario} onChange={(e) => setForm({ ...form, valor_unitario: e.target.value })} /></div>
-                <div><Label className="text-xs" style={{ color: "#666" }}>Lote</Label><Input value={form.lote} onChange={(e) => setForm({ ...form, lote: e.target.value })} /></div>
-                <div><Label className="text-xs" style={{ color: "#666" }}>Validade</Label><Input type="date" value={form.validade} onChange={(e) => setForm({ ...form, validade: e.target.value })} /></div>
+                <div><Label className="text-xs text-muted-foreground">Fabricante</Label><Input value={form.fabricante} onChange={(e) => setForm({ ...form, fabricante: e.target.value })} /></div>
+                <div><Label className="text-xs text-muted-foreground">Qtd Atual</Label><Input type="number" value={form.quantidade_atual} onChange={(e) => setForm({ ...form, quantidade_atual: e.target.value })} /></div>
+                <div><Label className="text-xs text-muted-foreground">Qtd Mínima</Label><Input type="number" value={form.quantidade_minima} onChange={(e) => setForm({ ...form, quantidade_minima: e.target.value })} /></div>
+                <div><Label className="text-xs text-muted-foreground">Valor Unit.</Label><Input type="number" step="0.01" value={form.valor_unitario} onChange={(e) => setForm({ ...form, valor_unitario: e.target.value })} /></div>
+                <div><Label className="text-xs text-muted-foreground">Lote</Label><Input value={form.lote} onChange={(e) => setForm({ ...form, lote: e.target.value })} /></div>
+                <div><Label className="text-xs text-muted-foreground">Validade</Label><Input type="date" value={form.validade} onChange={(e) => setForm({ ...form, validade: e.target.value })} /></div>
               </div>
-              <Button onClick={() => criarItem.mutate()} disabled={!form.nome} className="mt-4 w-full font-semibold" style={{ background: "#1B5E7B", color: "white" }}>Cadastrar</Button>
+              <Button onClick={() => criarItem.mutate()} disabled={!form.nome} className="mt-4 w-full font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90">Cadastrar</Button>
             </DialogContent>
           </Dialog>
         } />

@@ -18,16 +18,16 @@ export default function KpiCards({ items }: KpiCardsProps) {
       {items.map((item) => (
         <div
           key={item.label}
-          className="rounded-lg p-4"
-          style={{ background: "#F5F5F5" }}
+          className="rounded-lg p-4 bg-muted"
         >
-          <p className="text-xs font-medium" style={{ color: "#666666" }}>{item.label}</p>
-          <p className="text-[22px] font-bold mt-1" style={{ color: "#2C3E50", fontVariantNumeric: "tabular-nums" }}>
+          <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
+          <p className="text-[22px] font-bold mt-1 text-foreground" style={{ fontVariantNumeric: "tabular-nums" }}>
             {item.isCurrency !== false && typeof item.value === "number" ? formatCurrency(item.value) : item.value}
           </p>
           {item.sublabel && (
-            <p className="text-[11px] mt-0.5" style={{ color: item.sublabelColor || "#666666" }}>
-              {item.sublabel}
+            <p className="text-[11px] mt-0.5" style={{ color: item.sublabelColor || undefined }}>
+              {!item.sublabelColor && <span className="text-muted-foreground">{item.sublabel}</span>}
+              {item.sublabelColor && item.sublabel}
             </p>
           )}
         </div>
