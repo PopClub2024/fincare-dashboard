@@ -178,9 +178,20 @@ Deno.serve(async (req) => {
       fileMime = file.type || "application/octet-stream";
       if (!descricao_hint) descricao_hint = fileName;
 
-      const allowedMimes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-      if (!allowedMimes.includes(fileMime)) {
-        return jsonResponse({ error: `Tipo não suportado: ${fileMime}. Aceitos: JPG, PNG, WebP, PDF` }, 400);
+      const allowedMimes = [
+        "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif",
+        "image/tiff", "image/bmp", "image/svg+xml",
+        "application/pdf",
+        "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/csv", "text/plain", "application/rtf",
+        "application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet",
+      ];
+      // Aceitar qualquer tipo de imagem ou documento — ser permissivo
+      const isImage = fileMime.startsWith("image/");
+      const isAllowed = isImage || allowedMimes.includes(fileMime);
+      if (!isAllowed) {
+        return jsonResponse({ error: `Tipo não suportado: ${fileMime}. Aceitos: imagens, PDF, DOC, DOCX, XLS, XLSX, CSV, TXT, RTF, ODS, ODT` }, 400);
       }
 
       fileBytes = new Uint8Array(await file.arrayBuffer());

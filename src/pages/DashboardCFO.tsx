@@ -15,6 +15,8 @@ import {
   FileBarChart, Wallet, FileText, PieChart, ArrowDownCircle,
   ArrowUpCircle, Activity, TrendingUp,
 } from "lucide-react";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 const tabs = [
   { value: "dre", label: "DRE", icon: FileBarChart },

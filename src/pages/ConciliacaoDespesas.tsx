@@ -11,6 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle2, AlertTriangle, Clock, RefreshCw, Undo2, Eye, EyeOff,
 } from "lucide-react";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 interface ConciliacaoDespesa {
   id: string;

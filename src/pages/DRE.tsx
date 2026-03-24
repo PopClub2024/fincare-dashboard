@@ -29,6 +29,8 @@ import {
 import { format, subYears, startOfYear, endOfYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import ReceitaPorCanal from "@/components/dashboard/ReceitaPorCanal";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);

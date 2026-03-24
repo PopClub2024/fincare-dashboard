@@ -27,6 +27,8 @@ import {
   DollarSign, TrendingUp, Users, Plus, Pencil, Trash2, Save, X,
   AlertTriangle, ArrowUpDown, Building2, Percent,
 } from "lucide-react";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);

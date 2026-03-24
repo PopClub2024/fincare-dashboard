@@ -248,9 +248,9 @@ function TabIntegracoes() {
           <div className="flex items-center gap-4">
             <Label htmlFor="ofx-upload" className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input bg-muted/50 px-6 py-4 text-sm text-muted-foreground transition-colors hover:bg-muted">
               <Upload className="h-4 w-4" />
-              {loadingOFX ? "Processando..." : "Selecionar arquivo .OFX"}
+              {loadingOFX ? "Processando..." : "Selecionar arquivo (OFX, CSV, XLS)"}
             </Label>
-            <Input id="ofx-upload" type="file" accept=".ofx" className="hidden" onChange={handleOFXUpload} disabled={loadingOFX} />
+            <Input id="ofx-upload" type="file" accept=".ofx,.csv,.xls,.xlsx,.txt" className="hidden" onChange={handleOFXUpload} disabled={loadingOFX} />
           </div>
         </CardContent>
       </Card>

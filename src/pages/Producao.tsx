@@ -3,6 +3,8 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import DashboardFilters, { DashboardFilterValues } from "@/components/dashboard/DashboardFilters";
 import TabProducao from "@/components/dashboard/TabProducao";
 import { startOfMonth, endOfMonth } from "date-fns";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 const producaoDefaultFilters: DashboardFilterValues = {
   dateFrom: startOfMonth(new Date(2026, 0, 1)),

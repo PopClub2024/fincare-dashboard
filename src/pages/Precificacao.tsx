@@ -27,6 +27,8 @@ import {
   FileText, CheckCircle2, XCircle, RefreshCw, ChevronRight, Percent,
   Calculator, BarChart3, Layers,
 } from "lucide-react";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);

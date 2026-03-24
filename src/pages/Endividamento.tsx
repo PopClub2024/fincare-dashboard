@@ -26,6 +26,8 @@ import {
   Landmark, TrendingDown, DollarSign, CalendarDays, Plus, ChevronLeft,
   AlertTriangle, CheckCircle2, Clock, ArrowDownRight, Receipt, AlertCircle, Calendar,
 } from "lucide-react";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);

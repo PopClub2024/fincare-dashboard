@@ -8,6 +8,10 @@ import {
   LayoutDashboard, Receipt, FileText, ArrowDownCircle, ArrowUpCircle,
   Settings, LogOut, Menu, X, FileBarChart, Wallet, Landmark,
   Tag, Building2, GitCompare, Plug, ChevronRight, Zap, Inbox, ClipboardCheck, HeartHandshake,
+  Users, Calendar, CheckCircle, Clock, Stethoscope, Monitor,
+  MessageSquare, Package, TrendingUp, Star, BookOpen, FileSignature,
+  UserRound, ClipboardList, Bot, Shield, Megaphone, BarChart3,
+  BellRing, Tv, FolderOpen, Wrench,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { cn } from "@/lib/utils";
@@ -19,57 +23,95 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    title: "Visão Geral",
+    title: "Visao Geral",
     items: [
-      { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-      { label: "CFO Assistente", icon: Zap, path: "/cfo-assistente" },
+      { label: "Dashboard CFO", icon: LayoutDashboard, path: "/dashboard" },
+      { label: "CFO Assistente", icon: Bot, path: "/cfo-assistente" },
     ],
   },
   {
-    title: "Demonstrativos",
+    title: "Agenda & Atendimento",
+    items: [
+      { label: "Pacientes", icon: UserRound, path: "/pacientes" },
+      { label: "Agenda Medica", icon: Calendar, path: "/agenda" },
+      { label: "Check-in", icon: CheckCircle, path: "/checkin" },
+      { label: "Sala de Espera", icon: Clock, path: "/sala-espera" },
+      { label: "Confirmacoes", icon: BellRing, path: "/confirmacao-agendamentos" },
+      { label: "TV Recepcao", icon: Tv, path: "/tv-recepcao" },
+    ],
+  },
+  {
+    title: "Area do Medico",
+    items: [
+      { label: "Painel Medico", icon: Stethoscope, path: "/area-medico" },
+    ],
+  },
+  {
+    title: "Financeiro",
     items: [
       { label: "DRE", icon: FileBarChart, path: "/dre" },
       { label: "Fluxo de Caixa", icon: Wallet, path: "/fluxo-de-caixa" },
-      { label: "Produção", icon: FileText, path: "/producao" },
+      { label: "Producao", icon: FileText, path: "/producao" },
       { label: "Caixa", icon: Receipt, path: "/caixa" },
-    ],
-  },
-  {
-    title: "Contas",
-    items: [
       { label: "Contas a Receber", icon: ArrowDownCircle, path: "/contas-a-receber" },
       { label: "Contas a Pagar", icon: ArrowUpCircle, path: "/contas-a-pagar" },
-      { label: "Convênios", icon: HeartHandshake, path: "/convenios" },
+      { label: "Convenios", icon: HeartHandshake, path: "/convenios" },
+      { label: "Conciliacao Receitas", icon: GitCompare, path: "/conciliacao" },
+      { label: "Conciliacao Despesas", icon: GitCompare, path: "/conciliacao-despesas" },
+      { label: "Precificacao", icon: Tag, path: "/precificacao" },
+      { label: "Custo Fixo", icon: Building2, path: "/custo-fixo" },
       { label: "Endividamento", icon: Landmark, path: "/endividamento" },
     ],
   },
   {
-    title: "Operacional",
+    title: "Comunicacao",
     items: [
-      { label: "Conciliação Receitas", icon: GitCompare, path: "/conciliacao" },
-      { label: "Conciliação Despesas", icon: GitCompare, path: "/conciliacao-despesas" },
-      { label: "Precificação", icon: Tag, path: "/precificacao" },
-      { label: "Custo Fixo", icon: Building2, path: "/custo-fixo" },
+      { label: "WhatsApp", icon: MessageSquare, path: "/whatsapp" },
     ],
   },
   {
-    title: "Automação",
+    title: "RH",
     items: [
-      { label: "Central Automações", icon: Zap, path: "/operacao/automacoes" },
-      { label: "Inbox Importações", icon: Inbox, path: "/importacoes/inbox" },
-      { label: "Checklist Operação", icon: ClipboardCheck, path: "/debug/operacao" },
+      { label: "Recursos Humanos", icon: Users, path: "/rh" },
     ],
   },
   {
-    title: "Integrações",
+    title: "Estoque",
     items: [
+      { label: "Gestao de Estoque", icon: Package, path: "/estoque" },
+    ],
+  },
+  {
+    title: "Marketing",
+    items: [
+      { label: "Marketing & CMO", icon: Megaphone, path: "/marketing" },
+    ],
+  },
+  {
+    title: "Juridico & TISS",
+    items: [
+      { label: "Contratos", icon: FileSignature, path: "/contratos" },
+      { label: "Guias TISS", icon: FolderOpen, path: "/guias-tiss" },
+    ],
+  },
+  {
+    title: "Qualidade",
+    items: [
+      { label: "NPS / Satisfacao", icon: Star, path: "/nps" },
+      { label: "Playbooks (POP)", icon: BookOpen, path: "/playbooks" },
+    ],
+  },
+  {
+    title: "Configuracoes",
+    items: [
+      { label: "Config. Financeiro", icon: Settings, path: "/configuracoes" },
+      { label: "Sistema & Agentes IA", icon: Bot, path: "/configuracoes-sistema" },
+      { label: "Automacoes", icon: Zap, path: "/operacao/automacoes" },
+      { label: "Inbox Importacoes", icon: Inbox, path: "/importacoes/inbox" },
       { label: "Feegow", icon: Plug, path: "/integracoes/feegow" },
-      { label: "Configurações", icon: Settings, path: "/configuracoes" },
     ],
   },
 ];
-
-const allItems = navSections.flatMap((s) => s.items);
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { signOut, user } = useAuth();
@@ -79,46 +121,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const isActive = (path: string) => location.pathname === path;
 
+  const renderNav = (onItemClick?: () => void) => (
+    <>
+      {navSections.map((section) => (
+        <div key={section.title} className="px-3 py-1">
+          <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
+            {section.title}
+          </p>
+          {section.items.map((item) => (
+            <button
+              key={item.path}
+              onClick={() => { navigate(item.path); onItemClick?.(); }}
+              className={cn(
+                "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
+                isActive(item.path)
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              )}
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{item.label}</span>
+              {isActive(item.path) && (
+                <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-60" />
+              )}
+            </button>
+          ))}
+        </div>
+      ))}
+    </>
+  );
+
   return (
     <div className="flex min-h-screen w-full bg-background">
       {/* Sidebar desktop */}
       <aside className="hidden w-[260px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-        {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-5">
           <img src={logo} alt="Medic Pop" className="h-9 w-auto" />
-          <span className="text-sm font-bold tracking-tight text-sidebar-foreground">FinCare</span>
+          <span className="text-sm font-bold tracking-tight text-sidebar-foreground">Medic Pop</span>
         </div>
-
-        {/* Nav */}
         <ScrollArea className="flex-1 py-2">
-          {navSections.map((section) => (
-            <div key={section.title} className="px-3 py-1">
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-                {section.title}
-              </p>
-              {section.items.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => navigate(item.path)}
-                  className={cn(
-                    "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
-                    isActive(item.path)
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                  )}
-                >
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                  {isActive(item.path) && (
-                    <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-60" />
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
+          {renderNav()}
         </ScrollArea>
-
-        {/* User + Logout */}
         <div className="border-t border-sidebar-border p-3">
           {user?.email && (
             <p className="mb-2 truncate px-3 text-[11px] text-sidebar-foreground/50">
@@ -153,35 +196,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
           <div className="flex items-center gap-2">
             <img src={logo} alt="Medic Pop" className="h-8 w-auto" />
-            <span className="text-sm font-bold text-sidebar-foreground">FinCare</span>
+            <span className="text-sm font-bold text-sidebar-foreground">Medic Pop</span>
           </div>
           <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)} className="text-sidebar-foreground">
             <X className="h-5 w-5" />
           </Button>
         </div>
         <ScrollArea className="h-[calc(100vh-56px)]">
-          {navSections.map((section) => (
-            <div key={section.title} className="px-3 py-1">
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40">
-                {section.title}
-              </p>
-              {section.items.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => { navigate(item.path); setMobileOpen(false); }}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                    isActive(item.path)
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent"
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          ))}
+          {renderNav(() => setMobileOpen(false))}
           <Separator className="mx-3 my-2 bg-sidebar-border" />
           <div className="px-3 pb-4">
             <button
@@ -197,14 +219,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
-        {/* Mobile header */}
         <header className="flex h-14 items-center gap-3 border-b bg-card px-4 lg:hidden">
           <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
           <img src={logo} alt="Medic Pop" className="h-8 w-auto" />
         </header>
-
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">{children}</main>
       </div>
     </div>

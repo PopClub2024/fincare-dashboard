@@ -15,6 +15,8 @@ import {
   ArrowDownCircle, ArrowUpCircle, Banknote, RefreshCw, FileSearch,
   Upload, CreditCard, FileArchive,
 } from "lucide-react";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 interface ReconciliationResult {
   success: boolean;
@@ -171,13 +173,13 @@ export default function Conciliacao() {
                 <Label htmlFor="getnet-cartao" className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input bg-muted/50 px-4 py-3 text-sm text-muted-foreground hover:bg-muted">
                   <Upload className="h-4 w-4" />{importingGetnet ? "Processando..." : "Cartão CSV"}
                 </Label>
-                <Input id="getnet-cartao" type="file" accept=".csv" className="hidden" onChange={(e) => handleGetnetCSV(e, "cartao")} disabled={importingGetnet} />
+                <Input id="getnet-cartao" type="file" accept=".csv,.xls,.xlsx,.ods,.txt" className="hidden" onChange={(e) => handleGetnetCSV(e, "cartao")} disabled={importingGetnet} />
               </div>
               <div>
                 <Label htmlFor="getnet-pix" className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input bg-muted/50 px-4 py-3 text-sm text-muted-foreground hover:bg-muted">
                   <Upload className="h-4 w-4" />{importingGetnet ? "Processando..." : "PIX CSV"}
                 </Label>
-                <Input id="getnet-pix" type="file" accept=".csv" className="hidden" onChange={(e) => handleGetnetCSV(e, "pix")} disabled={importingGetnet} />
+                <Input id="getnet-pix" type="file" accept=".csv,.xls,.xlsx,.ods,.txt" className="hidden" onChange={(e) => handleGetnetCSV(e, "pix")} disabled={importingGetnet} />
               </div>
             </CardContent>
           </Card>
@@ -191,7 +193,7 @@ export default function Conciliacao() {
               <Label htmlFor="getnet-recebiveis" className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input bg-muted/50 px-4 py-3 text-sm text-muted-foreground hover:bg-muted">
                 <Upload className="h-4 w-4" />{importingRecebiveis ? "Processando..." : "Recebíveis CSV"}
               </Label>
-              <Input id="getnet-recebiveis" type="file" accept=".csv" className="hidden" onChange={handleRecebiveisCSV} disabled={importingRecebiveis} />
+              <Input id="getnet-recebiveis" type="file" accept=".csv,.xls,.xlsx,.ods,.txt" className="hidden" onChange={handleRecebiveisCSV} disabled={importingRecebiveis} />
             </CardContent>
           </Card>
 

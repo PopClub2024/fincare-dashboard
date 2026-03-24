@@ -13,6 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 import { startOfMonth } from "date-fns";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 interface Convenio {
   id: string;
@@ -52,6 +54,7 @@ export default function Convenios() {
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
+            <ExportButtons data={[]} filename="convenios" titulo="Convenios" />
             <Select
               value={convenioId || "all"}
               onValueChange={(v) => setConvenioId(v === "all" ? null : v)}

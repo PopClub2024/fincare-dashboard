@@ -22,6 +22,8 @@ import { toast } from "sonner";
 import {
   DollarSign, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, CalendarDays, ArrowLeftRight, Pencil,
 } from "lucide-react";
+import ExportButtons from "@/components/ExportButtons";
+import { flattenForExport } from "@/lib/export-utils";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
