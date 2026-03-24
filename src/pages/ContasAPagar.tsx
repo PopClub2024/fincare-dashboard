@@ -671,11 +671,11 @@ function TabLancamentos({ dateFrom, dateTo }: { dateFrom: Date; dateTo: Date }) 
                     type="button"
                     onClick={() => setForm({ ...form, forma_pagamento: op.key })}
                     className="rounded-full px-3 py-1 text-[12px] font-medium transition-all border"
-                    style={
+                    className={`rounded-full px-3 py-1 text-[12px] font-medium transition-all border ${
                       form.forma_pagamento === op.key
-                        ? { background: "#1B5E7B", color: "white", borderColor: "#1B5E7B" }
-                        : { background: "white", color: "#666", borderColor: "#E5E5E5" }
-                    }
+                        ? "bg-secondary text-secondary-foreground border-secondary"
+                        : "bg-card text-muted-foreground border-border"
+                    }`}
                   >
                     {op.label}
                   </button>
