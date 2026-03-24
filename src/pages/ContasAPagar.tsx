@@ -962,8 +962,7 @@ function TabComprovantes() {
       render: (c: Comprovante) => (
         <button
           onClick={() => setPreviewUrl(c.arquivo_url)}
-          className="flex items-center gap-2 text-[13px] hover:underline"
-          style={{ color: "#1B5E7B" }}
+          className="flex items-center gap-2 text-[13px] hover:underline text-secondary"
         >
           <FileText className="h-4 w-4 flex-shrink-0" />
           <span className="truncate max-w-[160px]">{c.arquivo_nome || "comprovante"}</span>
