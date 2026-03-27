@@ -49,9 +49,9 @@ export default function WhatsAppIntelligence() {
     queryFn: async () => {
       if (!clinicaId) return { insights: [], initiatives: [], runs: [] };
       const [insightsRes, initiativesRes, runsRes] = await Promise.all([
-        supabase.from("whatsapp_insight_items").select("*").eq("clinica_id", clinicaId).order("created_at", { ascending: false }).limit(100) as any,
-        supabase.from("whatsapp_initiatives").select("*").eq("clinica_id", clinicaId).order("created_at", { ascending: false }).limit(50) as any,
-        supabase.from("whatsapp_insight_runs").select("*").eq("clinica_id", clinicaId).order("started_at", { ascending: false }).limit(10) as any,
+        (supabase.from("whatsapp_insight_items" as any).select("*").eq("clinica_id", clinicaId).order("created_at", { ascending: false }).limit(100)),
+        (supabase.from("whatsapp_initiatives" as any).select("*").eq("clinica_id", clinicaId).order("created_at", { ascending: false }).limit(50)),
+        (supabase.from("whatsapp_insight_runs" as any).select("*").eq("clinica_id", clinicaId).order("started_at", { ascending: false }).limit(10)),
       ]);
       return {
         insights: insightsRes.data || [],
