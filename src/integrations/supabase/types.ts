@@ -1070,7 +1070,9 @@ export type Database = {
           data_admissao: string | null
           data_demissao: string | null
           departamento: string | null
+          departamento_id: string | null
           email: string | null
+          gestor_id: string | null
           id: string
           nome: string
           salario: number | null
@@ -1087,7 +1089,9 @@ export type Database = {
           data_admissao?: string | null
           data_demissao?: string | null
           departamento?: string | null
+          departamento_id?: string | null
           email?: string | null
+          gestor_id?: string | null
           id?: string
           nome: string
           salario?: number | null
@@ -1104,7 +1108,9 @@ export type Database = {
           data_admissao?: string | null
           data_demissao?: string | null
           departamento?: string | null
+          departamento_id?: string | null
           email?: string | null
+          gestor_id?: string | null
           id?: string
           nome?: string
           salario?: number | null
@@ -1118,6 +1124,20 @@ export type Database = {
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "colaboradores_departamento_id_fkey"
+            columns: ["departamento_id"]
+            isOneToOne: false
+            referencedRelation: "rh_departamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "colaboradores_gestor_id_fkey"
+            columns: ["gestor_id"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
             referencedColumns: ["id"]
           },
         ]
@@ -6320,6 +6340,266 @@ export type Database = {
             columns: ["paciente_id"]
             isOneToOne: false
             referencedRelation: "pacientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_departamentos: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+          responsavel_id: string | null
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          responsavel_id?: string | null
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          responsavel_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_departamentos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_departamentos_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_desligamentos: {
+        Row: {
+          causa: string | null
+          clinica_id: string
+          colaborador_id: string
+          created_at: string
+          custo: number | null
+          data_desligamento: string
+          decisao: string | null
+          id: string
+          motivo: string | null
+          observacoes: string | null
+        }
+        Insert: {
+          causa?: string | null
+          clinica_id: string
+          colaborador_id: string
+          created_at?: string
+          custo?: number | null
+          data_desligamento: string
+          decisao?: string | null
+          id?: string
+          motivo?: string | null
+          observacoes?: string | null
+        }
+        Update: {
+          causa?: string | null
+          clinica_id?: string
+          colaborador_id?: string
+          created_at?: string
+          custo?: number | null
+          data_desligamento?: string
+          decisao?: string | null
+          id?: string
+          motivo?: string | null
+          observacoes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_desligamentos_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_desligamentos_colaborador_id_fkey"
+            columns: ["colaborador_id"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_escalas: {
+        Row: {
+          clinica_id: string
+          colaborador_id: string
+          created_at: string
+          dia_semana: number
+          hora_fim: string | null
+          hora_inicio: string | null
+          id: string
+          turno: string
+        }
+        Insert: {
+          clinica_id: string
+          colaborador_id: string
+          created_at?: string
+          dia_semana: number
+          hora_fim?: string | null
+          hora_inicio?: string | null
+          id?: string
+          turno?: string
+        }
+        Update: {
+          clinica_id?: string
+          colaborador_id?: string
+          created_at?: string
+          dia_semana?: number
+          hora_fim?: string | null
+          hora_inicio?: string | null
+          id?: string
+          turno?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_escalas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_escalas_colaborador_id_fkey"
+            columns: ["colaborador_id"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_feedbacks: {
+        Row: {
+          clinica_id: string
+          created_at: string
+          destinatario_id: string
+          id: string
+          mensagem: string
+          remetente_id: string
+          tipo: string
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string
+          destinatario_id: string
+          id?: string
+          mensagem: string
+          remetente_id: string
+          tipo?: string
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string
+          destinatario_id?: string
+          id?: string
+          mensagem?: string
+          remetente_id?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_feedbacks_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_feedbacks_destinatario_id_fkey"
+            columns: ["destinatario_id"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_feedbacks_remetente_id_fkey"
+            columns: ["remetente_id"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_ferias: {
+        Row: {
+          aprovado_por: string | null
+          clinica_id: string
+          colaborador_id: string
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          dias_total: number
+          id: string
+          notas: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          aprovado_por?: string | null
+          clinica_id: string
+          colaborador_id: string
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          dias_total?: number
+          id?: string
+          notas?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          aprovado_por?: string | null
+          clinica_id?: string
+          colaborador_id?: string
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          dias_total?: number
+          id?: string
+          notas?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_ferias_aprovado_por_fkey"
+            columns: ["aprovado_por"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_ferias_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_ferias_colaborador_id_fkey"
+            columns: ["colaborador_id"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
             referencedColumns: ["id"]
           },
         ]
