@@ -108,7 +108,7 @@ export default function WhatsAppIntelligence() {
           <div>
             <h3 className="text-base font-bold">Inteligência</h3>
             <p className="text-xs text-muted-foreground">
-              {runs[0] ? `Última análise: ${new Date(runs[0].started_at).toLocaleDateString("pt-BR")}` : "Nenhuma análise executada"}
+              {runs[0] ? `Última análise: ${new Date((runs[0] as any).started_at).toLocaleDateString("pt-BR")}` : "Nenhuma análise executada"}
             </p>
           </div>
         </div>
