@@ -41,3 +41,9 @@ verify_jwt = false
 
 [functions.import-getnet-recebiveis]
 verify_jwt = false
+
+[functions.marketing-ai-chat]
+verify_jwt = false
+
+[functions.marketing-generate-creative]
+verify_jwt = false
