@@ -94,7 +94,7 @@ const container = {
 
 const item = {
   hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as const } },
 };
 
 /* ================================================================
@@ -172,10 +172,10 @@ export default function Recepcao() {
       const todayStr = format(new Date(), "yyyy-MM-dd");
       const [patientsRes, receivablesRes, payablesRes] = await Promise.all([
         supabase.from("pacientes").select("*", { count: "exact", head: true }),
-        supabase.from("contas_receber").select("valor").eq("status", "pendente"),
+        supabase.from("contas_receber_agregado").select("valor_esperado").eq("status", "pendente"),
         supabase.from("contas_pagar").select("valor").eq("status", "pendente"),
       ]);
-      const totalReceivable = (receivablesRes.data ?? []).reduce((s, r) => s + Number(r.valor || 0), 0);
+      const totalReceivable = (receivablesRes.data ?? []).reduce((s, r) => s + Number((r as any).valor_esperado || 0), 0);
       const totalPayable = (payablesRes.data ?? []).reduce((s, r) => s + Number(r.valor || 0), 0);
       return {
         patients: patientsRes.count ?? 0,
