@@ -1,77 +1,84 @@
 
 
-## Plano: Integrar funcionalidades do WhatsApp Clinica no projeto atual
+## Plano: Integrar funcionalidades do OrbRH no módulo de RH
 
-O projeto **WhatsApp Clinica** (jumedicpop) possui um sistema completo de CRM via WhatsApp com módulos que não existem ou estão simplificados no projeto atual. O objetivo é trazer as funcionalidades-chave para a página `/whatsapp` e criar sub-páginas/componentes complementares.
+O projeto OrbRH possui um sistema completo de gestão de RH. O objetivo é trazer as funcionalidades-chave para a página `/rh` e criar sub-páginas complementares, adaptadas ao schema existente (tabelas `colaboradores`, `registros_ponto`, `colaborador_documentos`).
 
 ---
 
 ### Funcionalidades a integrar
 
-| Funcionalidade | Origem (WhatsApp Clinica) | Status no projeto atual |
+| Funcionalidade | Origem (OrbRH) | Status atual |
 |---|---|---|
-| **Chat ao vivo com realtime** | `ChatInterface.tsx` + `useConversations.ts` — chat completo com inbox filters, transcrição de áudio, gravação de áudio, upload de mídia, painel de notas internas, respostas rápidas, media library | Existe um chat básico usando polling simples (refetchInterval 3s/5s) |
-| **Kanban - Jornada do Paciente** | `Kanban.tsx` — drag-and-drop, stages configuráveis, deal detail com atividades, memória do cliente, integração Feegow | Só tem um pipeline estático com etapas hardcoded |
-| **Dashboard WhatsApp** | `Dashboard.tsx` — KPIs reais (atendimentos, contatos, agendamentos, sessões billing, TMA, off-hours), gráficos com filtro de período | Não existe dashboard dedicado ao WhatsApp |
-| **Contatos CRM** | `Contacts.tsx` — lista de contatos com status lead/customer/churned, busca, ação iniciar conversa | Apenas leitura simples da tabela pacientes |
-| **Inteligência (AI Insights)** | `Intelligence.tsx` — análise de conversas por IA, insights categorizados, iniciativas CEO, chat com copilot, funnel analytics | Não existe |
-| **Relatórios avançados** | `Reports.tsx` — jornada do paciente, satisfação, sessões WhatsApp, métricas humanas, marketing, lista de espera | Não existe no contexto WhatsApp |
+| **Gestão de Colaboradores avançada** | Filtros por departamento/cargo/vínculo, ordenação, view cards/tabela, exportação CSV, perfil detalhado | Lista simples com busca básica |
+| **Controle de Ponto completo** | Clock in/out, timeline diária, banco de horas, heatmap mensal, ranking de horas, gráficos | Apenas tabela de registros do dia |
+| **Férias e Afastamentos** | Solicitações, aprovação/rejeição, calendário de férias, dashboard com KPIs | Não existe |
+| **Departamentos** | CRUD de departamentos com responsáveis, expansão por colaboradores | Não existe (campo texto "area") |
+| **Desligamentos** | Registro de demissões com motivo, decisão, custo, histórico | Não existe |
+| **Feedbacks** | Envio de feedbacks positivo/neutro/negativo entre colaboradores | Não existe |
+| **Avaliação de Desempenho** | Ciclos de avaliação, competências hard/soft skills, níveis | Não existe |
+| **People Analytics** | Dashboard com métricas de contratação, retenção, diversidade | Não existe |
+| **Escalas** | Calendário de escalas por colaborador, turno e dia | Placeholder vazio |
 
 ---
 
 ### Plano de implementação
 
-#### 1. Refatorar a página WhatsApp em sub-abas modulares
-- Manter a estrutura atual de `TabsList` mas **substituir o conteúdo** de cada aba com os componentes do WhatsApp Clinica adaptados
-- Criar componentes em `src/components/whatsapp/`:
-  - `WhatsAppDashboard.tsx` — Dashboard com KPIs e gráficos
-  - `WhatsAppChat.tsx` — Chat completo com inbox filters, gravação de áudio, media library, notas internas
-  - `WhatsAppKanban.tsx` — Kanban drag-and-drop com stages configuráveis
-  - `WhatsAppContacts.tsx` — CRM de contatos
-  - `WhatsAppIntelligence.tsx` — Painel de inteligência com insights e chat AI
-  - `WhatsAppReports.tsx` — Relatórios avançados
+#### 1. Migrations de banco de dados
+Criar tabelas complementares que faltam:
+- `rh_departamentos` — id, clinica_id, nome, descricao, responsavel_id (FK colaboradores)
+- `rh_ferias` — id, clinica_id, colaborador_id, data_inicio, data_fim, dias_total, status (pendente/aprovada/rejeitada/cancelada), notas, aprovado_por
+- `rh_desligamentos` — id, clinica_id, colaborador_id, data_desligamento, motivo, decisao, causa, custo, observacoes
+- `rh_feedbacks` — id, clinica_id, remetente_id, destinatario_id, tipo (positivo/neutro/negativo), mensagem, created_at
+- `rh_escalas` — id, clinica_id, colaborador_id, dia_semana, turno, hora_inicio, hora_fim
+- Adicionar colunas em `colaboradores`: `departamento_id`, `gestor_id`, `data_desligamento`, `status` (expandir para incluir "desligado")
 
-#### 2. Adaptar a camada de dados
-- Criar `src/services/whatsapp-api.ts` — Adaptação do `api.ts` do projeto fonte para usar as tabelas existentes neste projeto (`whatsapp_conversas`, `whatsapp_chat_mensagens`, `whatsapp_tags`, etc.)
-- Criar `src/hooks/useWhatsAppConversations.ts` — Hook de realtime baseado no `useConversations.ts` original, adaptado para o schema local
-- Criar `src/types/whatsapp.ts` — Tipos e interfaces (Message, Conversation, Deal, Contact, etc.)
+#### 2. Refatorar a página RH em abas modulares
+Expandir as abas de 4 para 8:
+- **Colaboradores** — Tabela avançada com filtros (departamento, cargo, vínculo, status), ordenação por coluna, ações (editar, desligar, excluir)
+- **Ponto** — Clock in/out visual, timeline diária, registros da semana, totais mensais
+- **Férias** — Dashboard com KPIs (em férias agora, pendentes, aprovadas), tabela de solicitações, aprovação/rejeição
+- **Departamentos** — CRUD de departamentos, lista de colaboradores por departamento expandível
+- **Desligamentos** — Registro e histórico de demissões com motivo, custo, decisão
+- **Feedbacks** — Envio e consulta de feedbacks entre colaboradores com filtros por tipo/data
+- **Documentos** — Manter funcionalidade atual de upload
+- **Escalas** — Calendário visual de escalas por colaborador e turno
 
-#### 3. Migrations de banco de dados
-- Criar tabelas que existem no WhatsApp Clinica mas faltam aqui:
-  - `contacts` (tabela CRM separada de `pacientes`)
-  - `conversations` + `messages` (schema do realtime chat)
-  - `pipeline_stages` + `deals` + `deal_activities`
-  - `team_members` + `teams` + `team_functions`
-  - `tags` (tag definitions)
-  - `insight_items` + `insight_runs` + `initiatives` + `funnel_analytics_daily`
-  - `waitlist_entries`
-  - `whatsapp_billing_sessions`
-  - `marketing_campaigns` (se não existir)
-- OU adaptar os componentes para usar as tabelas já existentes (`whatsapp_conversas`, `whatsapp_mensagens`, `whatsapp_pipeline_contatos`, etc.)
+#### 3. Componentes a criar
+Em `src/components/rh/`:
+- `RHColaboradores.tsx` — Tabela avançada com filtros e ordenação
+- `RHPonto.tsx` — Controle de ponto com timeline e totais
+- `RHFerias.tsx` — Gestão de férias com aprovação
+- `RHDepartamentos.tsx` — CRUD de departamentos
+- `RHDesligamentos.tsx` — Gestão de desligamentos
+- `RHFeedbacks.tsx` — Envio e consulta de feedbacks
+- `RHDocumentos.tsx` — Upload de documentos (extraído do atual)
+- `RHEscalas.tsx` — Calendário de escalas
 
-#### 4. Atualizar a página principal
-- Refatorar `src/pages/WhatsApp.tsx` para importar os novos componentes modulares em vez de ter tudo inline (695 linhas hoje)
-- Adicionar as novas abas: Dashboard, Chat, Pipeline, Contatos, Inteligência, Relatórios
+#### 4. Adaptar ao schema existente
+- Usar tabela `colaboradores` existente (com colunas: nome, cpf, cargo, area, tipo_vinculo, salario, status, etc.)
+- Usar `registros_ponto` existente para o controle de ponto
+- Usar `colaborador_documentos` existente para documentos
+- Criar novas tabelas com prefixo `rh_` para férias, feedbacks, desligamentos, departamentos, escalas
 
 ---
 
 ### Abordagem técnica
 
-- **Adaptar ao schema existente**: As tabelas `whatsapp_conversas`, `whatsapp_chat_mensagens`, `whatsapp_pipeline_contatos`, `whatsapp_tags`, `whatsapp_respostas_prontas`, `whatsapp_fila_humano` já existem. Os componentes serão adaptados para usar estas tabelas em vez de criar novas
-- **Realtime**: Substituir o polling atual (refetchInterval) por subscription Supabase realtime como no projeto fonte
-- **Design**: Manter o design system dark (slate-950) do WhatsApp Clinica que já combina com o tema do projeto
-- **Sem dependências externas novas**: Os componentes usam apenas shadcn/ui, lucide-react, recharts e react-day-picker que já existem no projeto
+- **Adaptação ao contexto clínica**: Todas as tabelas terão `clinica_id` como filtro (padrão do projeto atual), diferente do OrbRH que usa `organization_id`
+- **Sem dependências novas**: Usa apenas shadcn/ui, lucide-react, recharts, date-fns já existentes
+- **Design**: Manter o padrão `DashboardLayout` + Tabs do projeto atual
+- **RLS**: Políticas baseadas em `clinica_id` consistentes com o resto do sistema
 
 ### Arquivos criados/alterados
-- `src/types/whatsapp.ts` (novo)
-- `src/services/whatsapp-api.ts` (novo)
-- `src/hooks/useWhatsAppConversations.ts` (novo)
-- `src/components/whatsapp/WhatsAppDashboard.tsx` (novo)
-- `src/components/whatsapp/WhatsAppChat.tsx` (novo)
-- `src/components/whatsapp/WhatsAppKanban.tsx` (novo)
-- `src/components/whatsapp/WhatsAppContacts.tsx` (novo)
-- `src/components/whatsapp/WhatsAppIntelligence.tsx` (novo)
-- `src/components/whatsapp/WhatsAppReports.tsx` (novo)
-- `src/pages/WhatsApp.tsx` (refatorado)
-- Migration SQL para tabelas faltantes (`pipeline_stages`, `deals`, `deal_activities`, `tags`, `insight_items`, etc.)
+- `src/components/rh/RHColaboradores.tsx` (novo)
+- `src/components/rh/RHPonto.tsx` (novo)
+- `src/components/rh/RHFerias.tsx` (novo)
+- `src/components/rh/RHDepartamentos.tsx` (novo)
+- `src/components/rh/RHDesligamentos.tsx` (novo)
+- `src/components/rh/RHFeedbacks.tsx` (novo)
+- `src/components/rh/RHDocumentos.tsx` (novo)
+- `src/components/rh/RHEscalas.tsx` (novo)
+- `src/pages/RH.tsx` (refatorado — importa componentes modulares)
+- Migration SQL para novas tabelas + RLS
 
