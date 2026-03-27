@@ -4488,6 +4488,150 @@ export type Database = {
           },
         ]
       }
+      marketing_ab_test_variants: {
+        Row: {
+          cliques: number | null
+          conversoes: number | null
+          created_at: string | null
+          descricao: string | null
+          gasto: number | null
+          id: string
+          impressoes: number | null
+          nome: string
+          teste_id: string
+        }
+        Insert: {
+          cliques?: number | null
+          conversoes?: number | null
+          created_at?: string | null
+          descricao?: string | null
+          gasto?: number | null
+          id?: string
+          impressoes?: number | null
+          nome: string
+          teste_id: string
+        }
+        Update: {
+          cliques?: number | null
+          conversoes?: number | null
+          created_at?: string | null
+          descricao?: string | null
+          gasto?: number | null
+          id?: string
+          impressoes?: number | null
+          nome?: string
+          teste_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_ab_test_variants_teste_id_fkey"
+            columns: ["teste_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_ab_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_ab_tests: {
+        Row: {
+          analise_ia: string | null
+          campanha_id: string | null
+          clinica_id: string
+          created_at: string | null
+          id: string
+          metrica_principal: string | null
+          nome: string
+          resultado: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          analise_ia?: string | null
+          campanha_id?: string | null
+          clinica_id: string
+          created_at?: string | null
+          id?: string
+          metrica_principal?: string | null
+          nome: string
+          resultado?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          analise_ia?: string | null
+          campanha_id?: string | null
+          clinica_id?: string
+          created_at?: string | null
+          id?: string
+          metrica_principal?: string | null
+          nome?: string
+          resultado?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_ab_tests_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_automation_rules: {
+        Row: {
+          acao: string
+          ativo: boolean | null
+          clinica_id: string
+          condicao_campo: string
+          condicao_operador: string
+          condicao_valor: number | null
+          created_at: string | null
+          descricao: string | null
+          execucoes_total: number | null
+          id: string
+          nome: string
+          ultima_execucao: string | null
+        }
+        Insert: {
+          acao: string
+          ativo?: boolean | null
+          clinica_id: string
+          condicao_campo: string
+          condicao_operador: string
+          condicao_valor?: number | null
+          created_at?: string | null
+          descricao?: string | null
+          execucoes_total?: number | null
+          id?: string
+          nome: string
+          ultima_execucao?: string | null
+        }
+        Update: {
+          acao?: string
+          ativo?: boolean | null
+          clinica_id?: string
+          condicao_campo?: string
+          condicao_operador?: string
+          condicao_valor?: number | null
+          created_at?: string | null
+          descricao?: string | null
+          execucoes_total?: number | null
+          id?: string
+          nome?: string
+          ultima_execucao?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_automation_rules_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketing_calendario: {
         Row: {
           clinica_id: string
@@ -4588,6 +4732,94 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "marketing_campanhas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_copy_formulas: {
+        Row: {
+          categoria: string | null
+          clinica_id: string
+          created_at: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          template: string
+        }
+        Insert: {
+          categoria?: string | null
+          clinica_id: string
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          template: string
+        }
+        Update: {
+          categoria?: string | null
+          clinica_id?: string
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          template?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_copy_formulas_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_creatives: {
+        Row: {
+          clinica_id: string
+          created_at: string | null
+          descricao: string | null
+          formato: string | null
+          id: string
+          image_url: string | null
+          plataforma: string | null
+          prompt: string | null
+          tags: string[] | null
+          titulo: string
+          updated_at: string | null
+        }
+        Insert: {
+          clinica_id: string
+          created_at?: string | null
+          descricao?: string | null
+          formato?: string | null
+          id?: string
+          image_url?: string | null
+          plataforma?: string | null
+          prompt?: string | null
+          tags?: string[] | null
+          titulo: string
+          updated_at?: string | null
+        }
+        Update: {
+          clinica_id?: string
+          created_at?: string | null
+          descricao?: string | null
+          formato?: string | null
+          id?: string
+          image_url?: string | null
+          plataforma?: string | null
+          prompt?: string | null
+          tags?: string[] | null
+          titulo?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_creatives_clinica_id_fkey"
             columns: ["clinica_id"]
             isOneToOne: false
             referencedRelation: "clinicas"
@@ -4700,6 +4932,48 @@ export type Database = {
           },
         ]
       }
+      marketing_historico_reports: {
+        Row: {
+          clinica_id: string
+          conteudo_json: Json | null
+          created_at: string | null
+          enviado_para: string | null
+          id: string
+          template_id: string | null
+        }
+        Insert: {
+          clinica_id: string
+          conteudo_json?: Json | null
+          created_at?: string | null
+          enviado_para?: string | null
+          id?: string
+          template_id?: string | null
+        }
+        Update: {
+          clinica_id?: string
+          conteudo_json?: Json | null
+          created_at?: string | null
+          enviado_para?: string | null
+          id?: string
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_historico_reports_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_historico_reports_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_report_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketing_leads: {
         Row: {
           campanha_id: string | null
@@ -4767,6 +5041,139 @@ export type Database = {
             columns: ["paciente_id"]
             isOneToOne: false
             referencedRelation: "pacientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_report_templates: {
+        Row: {
+          agendamento: string | null
+          ativo: boolean | null
+          clinica_id: string
+          created_at: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          secoes: Json | null
+          ultimo_envio: string | null
+        }
+        Insert: {
+          agendamento?: string | null
+          ativo?: boolean | null
+          clinica_id: string
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          secoes?: Json | null
+          ultimo_envio?: string | null
+        }
+        Update: {
+          agendamento?: string | null
+          ativo?: boolean | null
+          clinica_id?: string
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          secoes?: Json | null
+          ultimo_envio?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_report_templates_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_rule_execution_log: {
+        Row: {
+          acao_executada: string | null
+          campanha_id: string | null
+          clinica_id: string
+          created_at: string | null
+          id: string
+          resultado: string | null
+          rule_id: string
+        }
+        Insert: {
+          acao_executada?: string | null
+          campanha_id?: string | null
+          clinica_id: string
+          created_at?: string | null
+          id?: string
+          resultado?: string | null
+          rule_id: string
+        }
+        Update: {
+          acao_executada?: string | null
+          campanha_id?: string | null
+          clinica_id?: string
+          created_at?: string | null
+          id?: string
+          resultado?: string | null
+          rule_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_rule_execution_log_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_rule_execution_log_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_automation_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_swipe_files: {
+        Row: {
+          clinica_id: string
+          conteudo: string
+          created_at: string | null
+          favorito: boolean | null
+          id: string
+          plataforma: string | null
+          tags: string[] | null
+          tipo: string | null
+          titulo: string
+        }
+        Insert: {
+          clinica_id: string
+          conteudo: string
+          created_at?: string | null
+          favorito?: boolean | null
+          id?: string
+          plataforma?: string | null
+          tags?: string[] | null
+          tipo?: string | null
+          titulo: string
+        }
+        Update: {
+          clinica_id?: string
+          conteudo?: string
+          created_at?: string | null
+          favorito?: boolean | null
+          id?: string
+          plataforma?: string | null
+          tags?: string[] | null
+          tipo?: string | null
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_swipe_files_clinica_id_fkey"
+            columns: ["clinica_id"]
+            isOneToOne: false
+            referencedRelation: "clinicas"
             referencedColumns: ["id"]
           },
         ]
